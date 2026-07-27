@@ -8,9 +8,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
     "test": "pnpm run build && node --test tests/*.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern out --ignore-pattern .next"
+    "lint": "eslint ."
   },
   "dependencies": {
     "next": "16.2.6",

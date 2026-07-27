@@ -16,7 +16,7 @@ import { fitsSubstrateArea, repeatShapes, transformGuideShapes } from "@/lib/exp
 import { createRunManifest, parseRunManifest } from "@/lib/manifest.js";
 import { createMonochromePreview, mergeBinaryOverlay, rasterizeBinaryMask } from "@/lib/raster.js";
 import { parseRecipeLibrary, saveRecipeToLibrary } from "@/lib/recipes.js";
-import { createAlignmentMarkShapes, createSubstrateOutlineShape, createWaferOutlinePath } from "@/lib/substrate.js";
+import { createAlignmentMarkShapes, createSubstrateOutlineShape } from "@/lib/substrate.js";
 import { buildZip } from "@/lib/zip.js";
 
 type MaskSettings = {
@@ -286,10 +286,10 @@ export default function Home() {
   const [measurementStart, setMeasurementStart] = useState<{ x: number; y: number } | null>(null);
   const [measurementEnd, setMeasurementEnd] = useState<{ x: number; y: number } | null>(null);
   const [inspection, setInspection] = useState({ x: Math.floor(MARS_4_9K.width / 2), y: Math.floor(MARS_4_9K.height / 2) });
-  const [calibrationMode, setCalibrationMode] = useState(false);
   const [calibrationSeries, setCalibrationSeries] = useState("5, 7, 9, 11, 13");
   const [processMetadata, setProcessMetadata] = useState(DEFAULT_PROCESS);
   const [sourceInfo, setSourceInfo] = useState<SourceInfo | null>(null);
+  const calibrationMode = sourceInfo?.kind === "generated-calibration";
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -329,15 +329,6 @@ export default function Home() {
     }
     return preset;
   }, [substrateTemplateId, customWidth, customHeight, customFlatLength]);
-  const waferOutlinePath = substrateTemplate?.shape === "circle" && waferMarker !== "round"
-    ? createWaferOutlinePath({
-      centreX: MARS_4_9K.sizeX / 2,
-      centreY: MARS_4_9K.sizeY / 2,
-      diameter: substrateTemplate.width,
-      marker: waferMarker,
-      flatLength: substrateTemplate.flatLength,
-    })
-    : null;
   const substrateOutlineShapes = useMemo(
     () => substrateTemplate ? [createSubstrateOutlineShape({
       shape: substrateTemplate.shape,
@@ -472,7 +463,6 @@ export default function Home() {
       const sha256 = await sha256Hex(buffer);
       const cell = parsed.topCells.at(-1) ?? "";
       setModel(parsed);
-      setCalibrationMode(false);
       setFileName(file.name);
       setSourceInfo({ kind: "gds", name: file.name, sizeBytes: file.size, sha256 });
       setTopCell(cell);
@@ -490,7 +480,6 @@ export default function Home() {
   function loadGeneratedPattern(kind: SourceInfo["kind"], name: string, generatedShapes: ReturnType<typeof flattenGds>, readyMessage: string) {
     const generatedLayers = [...new Set(generatedShapes.map((shape) => shape.layer))];
     setModel(null);
-    setCalibrationMode(kind === "generated-calibration");
     setFileName(name);
     setSourceInfo({ kind, name, sizeBytes: null, sha256: null });
     setTopCell("");
@@ -709,12 +698,22 @@ export default function Home() {
     return { goo, check: validateGooFile(goo) };
   }
 
-  async function exportGoo() {
-    if (!visibleShapes.length || outsideScreen) return;
+  async function runExport(startMessage: string, fallbackMessage: string, operation: () => Promise<void>) {
     setBusy(true);
-    setMessage("Rasterizing 36.8 million pixels locally…");
+    setMessage(startMessage);
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     try {
+      await operation();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : fallbackMessage);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function exportGoo() {
+    if (!visibleShapes.length || outsideScreen) return;
+    await runExport("Rasterizing 36.8 million pixels locally…", "The GOO file could not be generated.", async () => {
       const raster = rasterizeMask(repeatedShapes, settings, exportedSubstrateShapes);
       const { goo, check } = buildValidatedGoo(raster, settings.exposure);
       const baseName = outputBaseName();
@@ -722,20 +721,14 @@ export default function Home() {
       saveFile(goo, gooName, "application/octet-stream");
       saveFile(JSON.stringify(buildManifest([settings.exposure], [gooName]), null, 2), `${baseName}.run.json`, "application/json");
       setMessage(`GOO validated: ${check.pixels.toLocaleString("en-US")} pixels, 1 layer, ${settings.exposure} s.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The GOO file could not be generated.");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   async function exportCalibrationSeries() {
     if (!calibrationMode || !visibleShapes.length || outsideScreen) return;
-    try {
+    await runExport("Preparing calibration exposure series…", "The calibration series could not be generated.", async () => {
       const exposures = parseExposureSeries(calibrationSeries);
-      setBusy(true);
       setMessage(`Rasterizing calibration series for ${exposures.length} exposure(s)…`);
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       const raster = rasterizeMask(repeatedShapes, settings, exportedSubstrateShapes);
       const outputNames: string[] = [];
       const entries: Array<{ name: string; data: Uint8Array | string }> = [];
@@ -752,57 +745,47 @@ export default function Home() {
       entries.push({ name: "calibration-line-space.run.json", data: JSON.stringify(buildManifest(exposures, outputNames), null, 2) });
       saveFile(buildZip(entries), "calibration-line-space.experiment.zip", "application/zip");
       setMessage(`${exposures.length} validated calibration files packaged with PNG and manifest.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The calibration series could not be generated.");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   async function exportLayerFiles() {
     if (selectedLayers.length < 2 || outsideScreen) return;
-    setBusy(true);
-    setMessage(`Generating ${selectedLayers.length} independent layer exposure(s)…`);
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    try {
-      const entries: Array<{ name: string; data: Uint8Array | string }> = [];
-      const outputs: string[] = [];
-      const exposures: number[] = [];
-      for (let index = 0; index < selectedLayers.length; index += 1) {
-        const layer = selectedLayers[index];
-        const exposure = Number(layerExposures[layer] ?? settings.exposure);
-        if (!(exposure >= 0.1 && exposure <= 600)) throw new Error(`Layer ${layer} exposure must be between 0.1 and 600 s.`);
-        const layerShapes = repeatShapes(shapes.filter((shape) => shape.layer === layer), {
-          rows: repeatRows,
-          columns: repeatColumns,
-          pitchXMicrometers: repeatPitchX,
-          pitchYMicrometers: repeatPitchY,
-        });
-        const raster = rasterizeMask(layerShapes, settings, index === 0 ? exportedSubstrateShapes : []);
-        const { goo } = buildValidatedGoo(raster, exposure);
-        const exposureLabel = String(exposure).replace(".", "p");
-        const name = `${outputBaseName()}-L${layer}-${exposureLabel}s.goo`;
-        entries.push({ name, data: goo });
-        outputs.push(name);
-        exposures.push(exposure);
-        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      }
-      entries.push({ name: `${outputBaseName()}-layers.run.json`, data: JSON.stringify(buildManifest(exposures, outputs), null, 2) });
-      saveFile(buildZip(entries), `${outputBaseName()}-layer-exposures.zip`, "application/zip");
-      setMessage(`${selectedLayers.length} layer-specific GOO files validated and packaged.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The layer exposure package could not be generated.");
-    } finally {
-      setBusy(false);
-    }
+    await runExport(
+      `Generating ${selectedLayers.length} independent layer exposure(s)…`,
+      "The layer exposure package could not be generated.",
+      async () => {
+        const entries: Array<{ name: string; data: Uint8Array | string }> = [];
+        const outputs: string[] = [];
+        const exposures: number[] = [];
+        for (let index = 0; index < selectedLayers.length; index += 1) {
+          const layer = selectedLayers[index];
+          const exposure = Number(layerExposures[layer] ?? settings.exposure);
+          if (!(exposure >= 0.1 && exposure <= 600)) throw new Error(`Layer ${layer} exposure must be between 0.1 and 600 s.`);
+          const layerShapes = repeatShapes(shapes.filter((shape) => shape.layer === layer), {
+            rows: repeatRows,
+            columns: repeatColumns,
+            pitchXMicrometers: repeatPitchX,
+            pitchYMicrometers: repeatPitchY,
+          });
+          const raster = rasterizeMask(layerShapes, settings, index === 0 ? exportedSubstrateShapes : []);
+          const { goo } = buildValidatedGoo(raster, exposure);
+          const exposureLabel = String(exposure).replace(".", "p");
+          const name = `${outputBaseName()}-L${layer}-${exposureLabel}s.goo`;
+          entries.push({ name, data: goo });
+          outputs.push(name);
+          exposures.push(exposure);
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        }
+        entries.push({ name: `${outputBaseName()}-layers.run.json`, data: JSON.stringify(buildManifest(exposures, outputs), null, 2) });
+        saveFile(buildZip(entries), `${outputBaseName()}-layer-exposures.zip`, "application/zip");
+        setMessage(`${selectedLayers.length} layer-specific GOO files validated and packaged.`);
+      },
+    );
   }
 
   async function exportBundle() {
     if (!visibleShapes.length || outsideScreen) return;
-    setBusy(true);
-    setMessage("Building reproducible experiment package…");
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    try {
+    await runExport("Building reproducible experiment package…", "The experiment package could not be generated.", async () => {
       const raster = rasterizeMask(repeatedShapes, settings, exportedSubstrateShapes);
       const baseName = outputBaseName();
       const gooName = `${baseName}.goo`;
@@ -818,27 +801,16 @@ export default function Home() {
       ]);
       saveFile(zip, `${baseName}.experiment.zip`, "application/zip");
       setMessage("Experiment package validated: GOO, 9K PNG and run manifest.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The experiment package could not be generated.");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   async function exportPng() {
     if (!visibleShapes.length || outsideScreen) return;
-    setBusy(true);
-    setMessage("Generating 9K verification PNG…");
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    try {
+    await runExport("Generating 9K verification PNG…", "The PNG could not be generated.", async () => {
       const png = await encodePng(nativeMask(repeatedShapes, settings, exportedSubstrateShapes));
       saveFile(png, `${fileName.replace(/\.gds(ii)?$/i, "") || "mask"}-8520x4320.png`, "image/png");
       setMessage("9K PNG generated. Use it to verify orientation and polarity.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The PNG could not be generated.");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   return (
@@ -1238,21 +1210,9 @@ export default function Home() {
                     <div className="substrate-template" aria-hidden="true">
                       <svg viewBox={`0 0 ${MARS_4_9K.sizeX} ${MARS_4_9K.sizeY}`} preserveAspectRatio="none">
                         <g transform={`translate(${substrateOffsetX / 1000} ${-substrateOffsetY / 1000}) rotate(${-substrateRotation} ${MARS_4_9K.sizeX / 2} ${MARS_4_9K.sizeY / 2})`}>
-                          {substrateTemplate.shape === "circle" && waferMarker === "round" ? (
-                            <circle
-                              cx={MARS_4_9K.sizeX / 2}
-                              cy={MARS_4_9K.sizeY / 2}
-                              r={substrateTemplate.width / 2}
-                            />
-                          ) : substrateTemplate.shape === "rectangle" ? (
-                            <rect
-                              x={(MARS_4_9K.sizeX - substrateTemplate.width) / 2}
-                              y={(MARS_4_9K.sizeY - substrateTemplate.height) / 2}
-                              width={substrateTemplate.width}
-                              height={substrateTemplate.height}
-                              rx="0.5"
-                            />
-                          ) : <path className="wafer-outline" d={waferOutlinePath ?? undefined} />}
+                          <polyline points={substrateOutlineShapes[0].points.map((point) => (
+                            `${MARS_4_9K.sizeX / 2 + point.x / 1000},${MARS_4_9K.sizeY / 2 - point.y / 1000}`
+                          )).join(" ")} />
                           {edgeExclusion > 0 && (substrateTemplate.shape === "circle" ? (
                             <circle
                               className="usable-area"

@@ -9,7 +9,7 @@ import { createRunManifest, parseRunManifest } from "../lib/manifest.js";
 import { createMonochromePreview, mergeBinaryOverlay, rasterizeBinaryMask } from "../lib/raster.js";
 import { parseRecipeLibrary, saveRecipeToLibrary } from "../lib/recipes.js";
 import { buildZip } from "../lib/zip.js";
-import { createAlignmentMarkShapes, createSubstrateOutlineShape, createWaferOutlinePath } from "../lib/substrate.js";
+import { createAlignmentMarkShapes, createSubstrateOutlineShape } from "../lib/substrate.js";
 
 function record(type, dataType, payload = []) {
   const length = payload.length + 4;
@@ -223,14 +223,6 @@ test("creates a bounded, asymmetric printer orientation pattern", () => {
 });
 
 test("creates physically dimensioned wafer flat and notch outlines", () => {
-  const flat = createWaferOutlinePath({ centreX: 0, centreY: 0, diameter: 50.8, marker: "flat", flatLength: 15.88 });
-  assert.match(flat, /^M -7\.94 /);
-  assert.match(flat, /A 25\.4 25\.4 0 1 1 7\.94 /);
-
-  const notch = createWaferOutlinePath({ centreX: 0, centreY: 0, diameter: 50.8, marker: "notch" });
-  assert.match(notch, /L 0 24\.4 Z$/);
-  assert.throws(() => createWaferOutlinePath({ centreX: 0, centreY: 0, diameter: 50.8, marker: "flat", flatLength: 60 }), /Flat length/);
-
   const maskShape = createSubstrateOutlineShape({
     shape: "circle",
     widthMillimeters: 50.8,
@@ -243,6 +235,16 @@ test("creates physically dimensioned wafer flat and notch outlines", () => {
   assert.equal(maskShape.width, 180);
   assert.ok(Math.abs(maskShape.points[0].x - 7940) < 1e-9);
   assert.equal(maskShape.points.at(-1), maskShape.points[0]);
+
+  const notchShape = createSubstrateOutlineShape({
+    shape: "circle", widthMillimeters: 50.8, heightMillimeters: 50.8,
+    marker: "notch", lineWidthMicrometers: 180,
+  });
+  assert.ok(Math.abs(notchShape.points.at(-2).y + 24400) < 1e-9);
+  assert.throws(() => createSubstrateOutlineShape({
+    shape: "circle", widthMillimeters: 50.8, heightMillimeters: 50.8,
+    marker: "flat", flatLengthMillimeters: 60, lineWidthMicrometers: 180,
+  }), /Flat length/);
 
   assert.deepEqual([...mergeBinaryOverlay(new Uint8Array([0, 1, 0]), new Uint8Array([1, 1, 0]))], [1, 1, 0]);
   assert.deepEqual([...mergeBinaryOverlay(new Uint8Array([1, 0, 1]), new Uint8Array([1, 1, 0]), true)], [0, 0, 1]);
