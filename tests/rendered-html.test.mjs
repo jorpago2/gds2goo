@@ -11,6 +11,10 @@ test("exports the GDS2GOO application shell", async () => {
   assert.match(html, /ZOOM/);
   assert.match(html, /PIXEL GRID/);
   assert.match(html, /SUBSTRATE OUTLINE/);
+  assert.match(html, /MEASURE/);
+  assert.match(html, /Step-and-repeat/);
+  assert.match(html, /Local process recipes/);
+  assert.match(html, /Custom circular substrate/);
   assert.match(html, /2-inch wafer · Ø50\.8 mm/);
   assert.match(html, /Microscope slide · 75 × 25 mm/);
   assert.match(html, /A tool by Jorge Parra/);

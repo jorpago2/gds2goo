@@ -120,8 +120,14 @@ legend { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-sp
 .process-metadata > label { margin-top: 10px; }
 .process-metadata p { margin: 8px 0 0; color: var(--muted); font-size: 9px; }
 .process-metadata code { color: var(--ink); }
+.process-metadata button { min-height: 34px; margin-top: 9px; border: 1px solid var(--ink); background: white; color: var(--ink); cursor: pointer; font-weight: 750; }
+.process-metadata button:disabled { opacity: .38; cursor: not-allowed; }
+.layer-exposure-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; margin-top: 12px; }
+.recipe-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.recipe-library select { width: 100%; margin-top: 10px; }
 .status { min-height: 48px; border-left: 3px solid #4bba59; background: #edf6e8; display: grid; grid-template-columns: 24px 1fr; align-items: center; padding: 8px 11px; margin: 14px 0; }
 .status.error { border-color: #d84435; background: #fff0e9; }
+.status.warning { border-color: #e29419; background: #fff6dc; }
 .status > span { font-weight: 900; }
 .status p { margin: 0; font-size: 10px; line-height: 1.35; }
 .primary-action, .secondary-action { width: 100%; min-height: 48px; border: 0; cursor: pointer; font-weight: 850; }
@@ -148,6 +154,13 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, input[type
 .grid-control:has(input:disabled) { opacity: .38; cursor: not-allowed; }
 .template-control { display: flex; align-items: center; gap: 6px; }
 .template-control select { width: auto; min-height: 28px; margin: 0; padding: 4px 24px 4px 7px; font: 600 9px/1 var(--font-geist-mono), monospace; }
+.substrate-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 10px; margin: 0 0 13px; padding: 12px; border: 1px solid var(--line); background: #f1eee6; }
+.substrate-controls label { display: block; font: 750 8px/1.3 var(--font-geist-mono), monospace; letter-spacing: .04em; text-transform: uppercase; }
+.substrate-controls label > span { float: right; color: var(--muted); font-weight: 500; text-transform: none; }
+.substrate-controls input, .substrate-controls select { width: 100%; min-height: 31px; margin-top: 5px; padding: 5px 7px; border: 1px solid #bdb7aa; background: white; }
+.substrate-controls .inline-check { display: flex; align-items: center; gap: 7px; align-self: end; min-height: 31px; }
+.substrate-controls .inline-check input { width: auto; min-height: 0; margin: 0; accent-color: var(--orange); }
+.substrate-note { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 9px; line-height: 1.4; }
 .outline-width-control { display: grid; grid-template-columns: auto 78px auto; }
 .outline-width-control input { width: 78px; min-height: 28px; margin: 0; padding: 4px 7px; }
 .outline-width-control small { color: var(--muted); }
@@ -157,10 +170,15 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, input[type
 .preview-surface canvas { width: 100%; height: 100%; max-width: none; display: block; image-rendering: pixelated; }
 .substrate-template { position: absolute; inset: 0; z-index: 1; pointer-events: none; color: var(--orange); }
 .substrate-template svg { display: block; width: 100%; height: 100%; overflow: visible; }
-.substrate-template circle, .substrate-template rect, .substrate-template path { fill: none; stroke: currentColor; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.substrate-template circle, .substrate-template rect, .substrate-template path, .substrate-template polyline { fill: none; stroke: currentColor; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .substrate-template .centre-mark { stroke-dasharray: 3 2; }
-.substrate-template > span { position: absolute; left: 50%; transform: translate(-50%, -100%); padding: 3px 5px; background: rgba(5,8,7,.82); color: #ffb499; font: 700 8px/1 var(--font-geist-mono), monospace; letter-spacing: .05em; white-space: nowrap; }
+.substrate-template .usable-area { stroke: #d9ff43; stroke-dasharray: 4 3; }
+.substrate-template .alignment-mark { stroke: #fff3c6; }
+.substrate-template > span { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); padding: 3px 5px; background: rgba(5,8,7,.82); color: #ffb499; font: 700 8px/1 var(--font-geist-mono), monospace; letter-spacing: .05em; white-space: nowrap; }
 .preview-pixel-grid { position: absolute; inset: 0; z-index: 2; pointer-events: none; background-image: linear-gradient(to right, rgba(255,90,31,.5) .4px, transparent .4px), linear-gradient(to bottom, rgba(255,90,31,.5) .4px, transparent .4px); background-size: calc(100% / 8520) calc(100% / 4320); }
+.measurement-overlay { position: absolute; inset: 0; z-index: 3; width: 100%; height: 100%; pointer-events: none; }
+.measurement-overlay line, .measurement-overlay circle { fill: #050807; stroke: #d9ff43; stroke-width: 18; }
+.measurement-readout { margin: 7px 0 0; color: #d9ff43; font: 700 9px/1.3 var(--font-geist-mono), monospace; }
 .empty-preview { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; color: #e3f8c2; }
 .empty-preview strong { font: 800 14px/1 var(--font-geist-mono), monospace; letter-spacing: .22em; margin-top: 22px; }
 .empty-preview p { font-size: 11px; color: #76836f; }

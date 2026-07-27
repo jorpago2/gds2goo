@@ -4,10 +4,12 @@ import test from "node:test";
 import { fitsDisplay, flattenGds, parseGds, placedBoundsOf } from "../lib/gds.js";
 import { buildGooFile, encodeBinaryLayer, validateGooFile } from "../lib/goo.js";
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "../lib/calibration.js";
+import { fitsSubstrateArea, repeatShapes, transformGuideShapes } from "../lib/experiment.js";
 import { createRunManifest, parseRunManifest } from "../lib/manifest.js";
 import { createMonochromePreview, mergeBinaryOverlay, rasterizeBinaryMask } from "../lib/raster.js";
+import { parseRecipeLibrary, saveRecipeToLibrary } from "../lib/recipes.js";
 import { buildZip } from "../lib/zip.js";
-import { createSubstrateOutlineShape, createWaferOutlinePath } from "../lib/substrate.js";
+import { createAlignmentMarkShapes, createSubstrateOutlineShape, createWaferOutlinePath } from "../lib/substrate.js";
 
 function record(type, dataType, payload = []) {
   const length = payload.length + 4;
@@ -246,6 +248,29 @@ test("creates physically dimensioned wafer flat and notch outlines", () => {
   assert.deepEqual([...mergeBinaryOverlay(new Uint8Array([1, 0, 1]), new Uint8Array([1, 1, 0]), true)], [0, 0, 1]);
 });
 
+test("builds repeat arrays, substrate guides, usable-area checks and local recipes", () => {
+  const square = {
+    kind: "polygon", layer: 1, datatype: 0, width: 0, pathType: 0,
+    points: [{ x: -500, y: -500 }, { x: 500, y: -500 }, { x: 500, y: 500 }, { x: -500, y: 500 }],
+  };
+  const repeated = repeatShapes([square], { rows: 2, columns: 3, pitchXMicrometers: 2000, pitchYMicrometers: 3000 });
+  assert.equal(repeated.length, 6);
+  assert.deepEqual(repeated[0].points[0], { x: -2500, y: 1000 });
+  const settings = { anchor: "gds-origin", offsetX: 0, offsetY: 0, rotation: 0, mirrorX: false, mirrorY: false };
+  const substrate = { shape: "circle", widthMillimeters: 10, heightMillimeters: 10, marker: "round", flatLengthMillimeters: 0, offsetXMicrometers: 0, offsetYMicrometers: 0, rotationDegrees: 0, edgeExclusionMillimeters: 1 };
+  assert.equal(fitsSubstrateArea(repeated, settings, substrate), true);
+  assert.equal(fitsSubstrateArea(repeated, { ...settings, offsetX: 3000 }, substrate), false);
+
+  const guides = createAlignmentMarkShapes({ shape: "rectangle", widthMillimeters: 20, heightMillimeters: 10, style: "crosses", sizeMillimeters: 2, edgeExclusionMillimeters: 1, lineWidthMicrometers: 180 });
+  assert.equal(guides.length, 8);
+  const transformedPoint = transformGuideShapes([guides[0]], { offsetXMicrometers: 1000, offsetYMicrometers: 0, rotationDegrees: 180 })[0].points[0];
+  assert.ok(Math.abs(transformedPoint.x - 9000) < 1e-9 && Math.abs(transformedPoint.y - 2000) < 1e-9);
+
+  const recipe = { name: "AZ1505", exposure: 9, calibrationSeries: "7, 9, 11", process: { photoresist: "AZ1505", thicknessNm: "600", softBake: "100 C", development: "45 s", notes: "" } };
+  assert.deepEqual(parseRecipeLibrary(JSON.stringify(saveRecipeToLibrary([], recipe))), [recipe]);
+  assert.deepEqual(parseRecipeLibrary("not JSON"), []);
+});
+
 test("creates a reproducible run manifest", () => {
   const manifest = createRunManifest({
     source: { kind: "gds", name: "device.gds", sizeBytes: 1234, sha256: "abc" },
@@ -254,7 +279,14 @@ test("creates a reproducible run manifest", () => {
       selectedLayers: [1, 3],
       polarity: "exposed-geometry",
       placement: { anchor: "center", anchorXMicrometers: 0, anchorYMicrometers: 0, rotationDegrees: 0, mirrorX: false, mirrorY: false },
-      substrateOutline: { templateId: "wafer-2", marker: "flat", included: true, lineWidthMicrometers: 180 },
+      substrateOutline: {
+        templateId: "wafer-2", marker: "flat", included: true, lineWidthMicrometers: 180,
+        widthMillimeters: 50.8, heightMillimeters: 50.8, flatLengthMillimeters: 15.88,
+        offsetXMicrometers: 180, offsetYMicrometers: -360, rotationDegrees: 5,
+        edgeExclusionMillimeters: 3, alignmentStyle: "targets", alignmentSizeMillimeters: 3,
+      },
+      stepAndRepeat: { rows: 2, columns: 3, pitchXMicrometers: 10000, pitchYMicrometers: 12000 },
+      layerExposuresSeconds: { 1: 7, 3: 11 },
     },
     exposures: [7, 9, 11],
     process: { photoresist: "AZ1505", thicknessNm: "600", softBake: "100 C, 60 s", development: "45 s", notes: "test" },
@@ -267,7 +299,10 @@ test("creates a reproducible run manifest", () => {
   const restored = parseRunManifest(JSON.stringify(manifest));
   assert.equal(restored.settings.exposure, 7);
   assert.deepEqual(restored.selectedLayers, [1, 3]);
-  assert.deepEqual(restored.substrateOutline, { templateId: "wafer-2", marker: "flat", included: true, lineWidthMicrometers: 180 });
+  assert.equal(restored.substrateOutline.alignmentStyle, "targets");
+  assert.equal(restored.substrateOutline.offsetYMicrometers, -360);
+  assert.deepEqual(restored.stepAndRepeat, { rows: 2, columns: 3, pitchXMicrometers: 10000, pitchYMicrometers: 12000 });
+  assert.deepEqual(restored.layerExposures, { 1: 7, 3: 11 });
   assert.equal(restored.process.thicknessNm, "600");
   const invalidSubstrate = structuredClone(manifest);
   invalidSubstrate.mask.substrateOutline.lineWidthMicrometers = 1001;
