@@ -8,5 +8,6 @@ test("exports the GDS2GOO application shell", async () => {
   assert.match(html, /From GDS layout to the/);
   assert.match(html, /Elegoo Mars 4/);
   assert.match(html, /Generate \.GOO file/);
+  assert.match(html, /ZOOM/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });

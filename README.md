@@ -8,7 +8,7 @@ Local converter from GDSII layouts to single-layer `.goo` exposure files for the
 
 - Reads `BOUNDARY`, `BOX`, `PATH`, `SREF` and `AREF`, including magnification, rotation and reflection.
 - Preserves the physical GDS units and rasterizes to 8520 × 4320 pixels at 18 µm/pixel.
-- Supports layer selection, translation, rotation, mirroring and mask inversion.
+- Supports layer selection, preview zoom, translation, rotation, mirroring and mask inversion.
 - Exports GOO V3.0 with RLE and checksum, plus a 9K verification PNG.
 - All processing happens in the browser; the GDS file is never uploaded.
 

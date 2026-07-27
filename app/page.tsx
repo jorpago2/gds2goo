@@ -113,6 +113,7 @@ export default function Home() {
   const [message, setMessage] = useState("Load a GDSII file to begin.");
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [previewZoom, setPreviewZoom] = useState(1);
 
   const layers = useMemo(() => [...new Set(shapes.map((shape) => shape.layer))].sort((a, b) => a - b), [shapes]);
   const visibleShapes = useMemo(
@@ -359,11 +360,32 @@ export default function Home() {
         <section className="preview-panel">
           <div className="preview-toolbar">
             <div><span className="live-dot" /> LCD PREVIEW</div>
-            <p>153.36 × 77.76 mm <b>·</b> 8520 × 4320 px</p>
+            <div className="preview-tools">
+              <p>153.36 × 77.76 mm <b>·</b> 8520 × 4320 px</p>
+              <label className="zoom-control">
+                <span>ZOOM</span>
+                <input
+                  type="range"
+                  min="1"
+                  max="8"
+                  step="0.5"
+                  value={previewZoom}
+                  disabled={!visibleShapes.length}
+                  onChange={(event) => setPreviewZoom(Number(event.target.value))}
+                />
+                <output>{previewZoom.toFixed(1)}×</output>
+              </label>
+            </div>
           </div>
           <div className="lcd-shell">
             <div className="lcd-grid">
-              {visibleShapes.length ? <canvas ref={preview} aria-label="LCD mask preview" /> : (
+              {visibleShapes.length ? (
+                <canvas
+                  ref={preview}
+                  aria-label="LCD mask preview"
+                  style={{ width: `${previewZoom * 100}%`, height: `${previewZoom * 100}%` }}
+                />
+              ) : (
                 <div className="empty-preview">
                   <div className="empty-pattern"><i /><i /><i /><i /><i /></div>
                   <strong>LCD READY</strong>
