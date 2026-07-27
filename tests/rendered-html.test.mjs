@@ -11,5 +11,7 @@ test("exports the GDS2GOO application shell", async () => {
   assert.match(html, /ZOOM/);
   assert.match(html, /PIXEL GRID/);
   assert.match(html, /A tool by Jorge Parra/);
+  assert.match(html, /calibration pattern/);
+  assert.match(html, /Process metadata/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });

@@ -1,11 +1,22 @@
 "use client";
 
-import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "react";
-import { boundsOf, estimateMinimumFeature, flattenGds, parseGds } from "@/lib/gds.js";
+import { ChangeEvent, DragEvent, MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  boundsOf,
+  estimateMinimumFeature,
+  fitsDisplay,
+  flattenGds,
+  parseGds,
+  placementAnchorOf,
+  transformPlacedPoint,
+} from "@/lib/gds.js";
 import { buildGooFile, encodeBinaryLayer, MARS_4_9K, validateGooFile } from "@/lib/goo.js";
+import { createCalibrationShapes, parseExposureSeries } from "@/lib/calibration.js";
+import { createRunManifest } from "@/lib/manifest.js";
 
 type MaskSettings = {
   exposure: number;
+  anchor: "center" | "gds-origin" | "lower-left";
   offsetX: number;
   offsetY: number;
   rotation: number;
@@ -16,6 +27,7 @@ type MaskSettings = {
 
 const DEFAULT_SETTINGS: MaskSettings = {
   exposure: 9,
+  anchor: "center",
   offsetX: 0,
   offsetY: 0,
   rotation: 0,
@@ -24,16 +36,37 @@ const DEFAULT_SETTINGS: MaskSettings = {
   inverted: false,
 };
 
-function transformedPoint(point: { x: number; y: number }, center: { x: number; y: number }, settings: MaskSettings) {
-  let x = point.x - center.x;
-  let y = point.y - center.y;
-  if (settings.mirrorX) x *= -1;
-  if (settings.mirrorY) y *= -1;
-  if (settings.rotation === 90) [x, y] = [-y, x];
-  else if (settings.rotation === 180) [x, y] = [-x, -y];
-  else if (settings.rotation === 270) [x, y] = [y, -x];
-  return { x: x + settings.offsetX, y: y + settings.offsetY };
-}
+const INSPECTOR_SIZE = 64;
+
+type RasterViewport = {
+  fullWidth: number;
+  fullHeight: number;
+  offsetX: number;
+  offsetY: number;
+};
+
+type ProcessMetadata = {
+  photoresist: string;
+  thicknessNm: string;
+  softBake: string;
+  development: string;
+  notes: string;
+};
+
+type SourceInfo = {
+  kind: "gds" | "generated-calibration";
+  name: string;
+  sizeBytes: number | null;
+  sha256: string | null;
+};
+
+const DEFAULT_PROCESS: ProcessMetadata = {
+  photoresist: "",
+  thicknessNm: "",
+  softBake: "",
+  development: "",
+  notes: "",
+};
 
 function drawMask(
   canvas: HTMLCanvasElement,
@@ -41,19 +74,21 @@ function drawMask(
   settings: MaskSettings,
   width: number,
   height: number,
+  viewport?: RasterViewport,
 ) {
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext("2d", { alpha: false });
   if (!context) throw new Error("The browser could not create the mask canvas.");
-  const bounds = boundsOf(shapes);
-  const center = { x: (bounds.minX + bounds.maxX) / 2, y: (bounds.minY + bounds.maxY) / 2 };
-  const pixelsPerMicrometer = width / (MARS_4_9K.sizeX * 1000);
+  const anchor = placementAnchorOf(shapes, settings.anchor);
+  const fullWidth = viewport?.fullWidth ?? width;
+  const fullHeight = viewport?.fullHeight ?? height;
+  const pixelsPerMicrometer = fullWidth / (MARS_4_9K.sizeX * 1000);
   const map = (point: { x: number; y: number }) => {
-    const transformed = transformedPoint(point, center, settings);
+    const transformed = transformPlacedPoint(point, anchor, settings);
     return {
-      x: width / 2 + transformed.x * pixelsPerMicrometer,
-      y: height / 2 - transformed.y * pixelsPerMicrometer,
+      x: fullWidth / 2 + transformed.x * pixelsPerMicrometer - (viewport?.offsetX ?? 0),
+      y: fullHeight / 2 - transformed.y * pixelsPerMicrometer - (viewport?.offsetY ?? 0),
     };
   };
 
@@ -92,6 +127,27 @@ function previewPixels(shapes: ReturnType<typeof flattenGds>, settings: MaskSett
   return pixels;
 }
 
+function rasterizeMask(shapes: ReturnType<typeof flattenGds>, settings: MaskSettings) {
+  const canvas = document.createElement("canvas");
+  try {
+    const context = drawMask(canvas, shapes, settings, MARS_4_9K.width, MARS_4_9K.height);
+    const encoded = encodeBinaryLayer((y: number) => {
+      const rgba = context.getImageData(0, y, MARS_4_9K.width, 1).data;
+      const row = new Uint8Array(MARS_4_9K.width);
+      for (let x = 0; x < row.length; x += 1) row[x] = rgba[x * 4] > 127 ? 1 : 0;
+      return row;
+    }, MARS_4_9K.width, MARS_4_9K.height);
+    return {
+      encoded,
+      smallPreview: previewPixels(shapes, settings, 116, 116),
+      bigPreview: previewPixels(shapes, settings, 290, 290),
+    };
+  } finally {
+    canvas.width = 1;
+    canvas.height = 1;
+  }
+}
+
 function saveFile(bytes: BlobPart, name: string, type: string) {
   const url = URL.createObjectURL(new Blob([bytes], { type }));
   const link = document.createElement("a");
@@ -101,9 +157,16 @@ function saveFile(bytes: BlobPart, name: string, type: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+async function sha256Hex(buffer: ArrayBuffer) {
+  if (!globalThis.crypto?.subtle) return null;
+  const digest = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", buffer));
+  return [...digest].map((value) => value.toString(16).padStart(2, "0")).join("");
+}
+
 export default function Home() {
   const fileInput = useRef<HTMLInputElement>(null);
   const preview = useRef<HTMLCanvasElement>(null);
+  const inspector = useRef<HTMLCanvasElement>(null);
   const [model, setModel] = useState<ReturnType<typeof parseGds> | null>(null);
   const [fileName, setFileName] = useState("");
   const [topCell, setTopCell] = useState("");
@@ -115,6 +178,11 @@ export default function Home() {
   const [dragging, setDragging] = useState(false);
   const [previewZoom, setPreviewZoom] = useState(1);
   const [showPreviewGrid, setShowPreviewGrid] = useState(false);
+  const [inspection, setInspection] = useState({ x: Math.floor(MARS_4_9K.width / 2), y: Math.floor(MARS_4_9K.height / 2) });
+  const [calibrationMode, setCalibrationMode] = useState(false);
+  const [calibrationSeries, setCalibrationSeries] = useState("5, 7, 9, 11, 13");
+  const [processMetadata, setProcessMetadata] = useState(DEFAULT_PROCESS);
+  const [sourceInfo, setSourceInfo] = useState<SourceInfo | null>(null);
 
   const layers = useMemo(() => [...new Set(shapes.map((shape) => shape.layer))].sort((a, b) => a - b), [shapes]);
   const visibleShapes = useMemo(
@@ -126,16 +194,40 @@ export default function Home() {
     () => visibleShapes.length ? estimateMinimumFeature(visibleShapes) : null,
     [visibleShapes],
   );
-  const rotatedWidth = bounds && [90, 270].includes(settings.rotation) ? bounds.height : bounds?.width;
-  const rotatedHeight = bounds && [90, 270].includes(settings.rotation) ? bounds.width : bounds?.height;
-  const outsideScreen = Boolean(rotatedWidth && rotatedHeight && (
-    rotatedWidth > MARS_4_9K.sizeX * 1000 || rotatedHeight > MARS_4_9K.sizeY * 1000
+  const outsideScreen = Boolean(visibleShapes.length && !fitsDisplay(
+    visibleShapes,
+    settings,
+    MARS_4_9K.sizeX * 1000,
+    MARS_4_9K.sizeY * 1000,
   ));
 
   useEffect(() => {
     if (!preview.current || !visibleShapes.length) return;
     drawMask(preview.current, visibleShapes, settings, 1400, 710);
   }, [visibleShapes, settings]);
+
+  useEffect(() => {
+    if (!inspector.current || !visibleShapes.length) return;
+    const offsetX = Math.max(0, Math.min(MARS_4_9K.width - INSPECTOR_SIZE, inspection.x - INSPECTOR_SIZE / 2));
+    const offsetY = Math.max(0, Math.min(MARS_4_9K.height - INSPECTOR_SIZE, inspection.y - INSPECTOR_SIZE / 2));
+    const context = drawMask(inspector.current, visibleShapes, settings, INSPECTOR_SIZE, INSPECTOR_SIZE, {
+      fullWidth: MARS_4_9K.width,
+      fullHeight: MARS_4_9K.height,
+      offsetX,
+      offsetY,
+    });
+    context.strokeStyle = "#ff5a1f";
+    context.lineWidth = 0.5;
+    context.strokeRect(inspection.x - offsetX + 0.25, inspection.y - offsetY + 0.25, 0.5, 0.5);
+  }, [visibleShapes, settings, inspection]);
+
+  function inspectPreview(event: ReactMouseEvent<HTMLDivElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setInspection({
+      x: Math.max(0, Math.min(MARS_4_9K.width - 1, Math.floor((event.clientX - rect.left) / rect.width * MARS_4_9K.width))),
+      y: Math.max(0, Math.min(MARS_4_9K.height - 1, Math.floor((event.clientY - rect.top) / rect.height * MARS_4_9K.height))),
+    });
+  }
 
   function updateShapes(nextModel: ReturnType<typeof parseGds>, cell: string) {
     const flattened = flattenGds(nextModel, cell);
@@ -158,19 +250,38 @@ export default function Home() {
     try {
       setBusy(true);
       setMessage("Reading GDSII hierarchy…");
-      const parsed = parseGds(await file.arrayBuffer());
+      const buffer = await file.arrayBuffer();
+      const parsed = parseGds(buffer);
+      const sha256 = await sha256Hex(buffer);
       const cell = parsed.topCells.at(-1) ?? "";
       setModel(parsed);
+      setCalibrationMode(false);
       setFileName(file.name);
+      setSourceInfo({ kind: "gds", name: file.name, sizeBytes: file.size, sha256 });
       setTopCell(cell);
       updateShapes(parsed, cell);
     } catch (error) {
       setModel(null);
       setShapes([]);
+      setSourceInfo(null);
       setMessage(error instanceof Error ? error.message : "The GDS could not be read.");
     } finally {
       setBusy(false);
     }
+  }
+
+  function loadCalibrationPattern() {
+    const calibrationShapes = createCalibrationShapes();
+    const calibrationLayers = [...new Set(calibrationShapes.map((shape) => shape.layer))];
+    setModel(null);
+    setCalibrationMode(true);
+    setFileName("calibration-line-space-18-180um");
+    setSourceInfo({ kind: "generated-calibration", name: "calibration-line-space-18-180um", sizeBytes: null, sha256: null });
+    setTopCell("");
+    setShapes(calibrationShapes);
+    setSelectedLayers(calibrationLayers);
+    setSettings({ ...DEFAULT_SETTINGS, exposure: settings.exposure });
+    setMessage("Built-in 18–180 µm line/space calibration pattern ready.");
   }
 
   function onFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -199,35 +310,91 @@ export default function Home() {
       : [...current, layer].sort((a, b) => a - b));
   }
 
+  function outputBaseName() {
+    return fileName.replace(/\.gds(ii)?$/i, "") || "mask";
+  }
+
+  function buildManifest(exposures: number[], outputs: string[]) {
+    if (!sourceInfo) throw new Error("The source information is unavailable.");
+    return createRunManifest({
+      source: sourceInfo,
+      exposures,
+      outputs,
+      process: processMetadata,
+      mask: {
+        topCell: model ? topCell : null,
+        selectedLayers,
+        geometryCount: visibleShapes.length,
+        boundsMicrometers: bounds,
+        estimatedMinimumFeatureMicrometers: minimumFeature,
+        polarity: settings.inverted ? "exposed-background" : "exposed-geometry",
+        placement: {
+          anchor: settings.anchor,
+          anchorXMicrometers: settings.offsetX,
+          anchorYMicrometers: settings.offsetY,
+          rotationDegrees: settings.rotation,
+          mirrorX: settings.mirrorX,
+          mirrorY: settings.mirrorY,
+        },
+      },
+    });
+  }
+
   async function exportGoo() {
     if (!visibleShapes.length || outsideScreen) return;
     setBusy(true);
     setMessage("Rasterizing 36.8 million pixels locally…");
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    const canvas = document.createElement("canvas");
     try {
-      const context = drawMask(canvas, visibleShapes, settings, MARS_4_9K.width, MARS_4_9K.height);
-      const encoded = encodeBinaryLayer((y: number) => {
-        const rgba = context.getImageData(0, y, MARS_4_9K.width, 1).data;
-        const row = new Uint8Array(MARS_4_9K.width);
-        for (let x = 0; x < row.length; x += 1) row[x] = rgba[x * 4] > 127 ? 1 : 0;
-        return row;
-      }, MARS_4_9K.width, MARS_4_9K.height);
+      const raster = rasterizeMask(visibleShapes, settings);
       const goo = buildGooFile({
-        layerData: encoded.data,
+        layerData: raster.encoded.data,
         exposureSeconds: settings.exposure,
-        whitePixels: encoded.whitePixels,
-        smallPreview: previewPixels(visibleShapes, settings, 116, 116),
-        bigPreview: previewPixels(visibleShapes, settings, 290, 290),
+        whitePixels: raster.encoded.whitePixels,
+        smallPreview: raster.smallPreview,
+        bigPreview: raster.bigPreview,
       });
       const check = validateGooFile(goo);
-      saveFile(goo, `${fileName.replace(/\.gds(ii)?$/i, "") || "mask"}.goo`, "application/octet-stream");
+      const baseName = outputBaseName();
+      const gooName = `${baseName}.goo`;
+      saveFile(goo, gooName, "application/octet-stream");
+      saveFile(JSON.stringify(buildManifest([settings.exposure], [gooName]), null, 2), `${baseName}.run.json`, "application/json");
       setMessage(`GOO validated: ${check.pixels.toLocaleString("en-US")} pixels, 1 layer, ${settings.exposure} s.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The GOO file could not be generated.");
     } finally {
-      canvas.width = 1;
-      canvas.height = 1;
+      setBusy(false);
+    }
+  }
+
+  async function exportCalibrationSeries() {
+    if (!calibrationMode || !visibleShapes.length || outsideScreen) return;
+    try {
+      const exposures = parseExposureSeries(calibrationSeries);
+      setBusy(true);
+      setMessage(`Rasterizing calibration series for ${exposures.length} exposure(s)…`);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const raster = rasterizeMask(visibleShapes, settings);
+      const outputNames: string[] = [];
+      for (const exposure of exposures) {
+        const goo = buildGooFile({
+          layerData: raster.encoded.data,
+          exposureSeconds: exposure,
+          whitePixels: raster.encoded.whitePixels,
+          smallPreview: raster.smallPreview,
+          bigPreview: raster.bigPreview,
+        });
+        validateGooFile(goo);
+        const exposureLabel = String(exposure).replace(".", "p");
+        const outputName = `calibration-line-space-${exposureLabel}s.goo`;
+        outputNames.push(outputName);
+        saveFile(goo, outputName, "application/octet-stream");
+      }
+      saveFile(JSON.stringify(buildManifest(exposures, outputNames), null, 2), "calibration-line-space.run.json", "application/json");
+      setMessage(`${exposures.length} validated calibration files generated.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The calibration series could not be generated.");
+    } finally {
       setBusy(false);
     }
   }
@@ -291,13 +458,17 @@ export default function Home() {
             <small>{fileName ? "Click to replace it" : "or click to browse · max. 100 MB"}</small>
           </div>
 
-          {model && (
+          <button className="calibration-load" type="button" disabled={busy} onClick={loadCalibrationPattern}>
+            Use built-in 18–180 µm calibration pattern
+          </button>
+
+          {(model || calibrationMode) && (
             <div className="file-options">
-              <label>Top cell
+              {model && <label>Top cell
                 <select value={topCell} onChange={(event) => changeTopCell(event.target.value)}>
                   {model.topCells.map((cell) => <option key={cell}>{cell}</option>)}
                 </select>
-              </label>
+              </label>}
               <fieldset>
                 <legend>Layers to expose</legend>
                 <div className="layer-list">
@@ -308,7 +479,7 @@ export default function Home() {
                       className={selectedLayers.includes(layer) ? "active" : ""}
                       onClick={() => toggleLayer(layer)}
                       aria-pressed={selectedLayers.includes(layer)}
-                    >L{layer}</button>
+                    >{calibrationMode ? `${layer * 18} µm` : `L${layer}`}</button>
                   ))}
                 </div>
               </fieldset>
@@ -327,15 +498,34 @@ export default function Home() {
                 {[0, 90, 180, 270].map((angle) => <option key={angle} value={angle}>{angle}°</option>)}
               </select>
             </label>
-            <label>X offset <span>µm</span>
+            <label className="full-width">Placement anchor
+              <select value={settings.anchor} onChange={(event) => setSettings({ ...settings, anchor: event.target.value as MaskSettings["anchor"] })}>
+                <option value="center">Layout centre</option>
+                <option value="gds-origin">GDS origin (0, 0)</option>
+                <option value="lower-left">Layout lower-left</option>
+              </select>
+            </label>
+            <label>Anchor X <span>µm</span>
               <input type="number" step="18" value={settings.offsetX}
                 onChange={(event) => setSettings({ ...settings, offsetX: Number(event.target.value) })} />
             </label>
-            <label>Y offset <span>µm</span>
+            <label>Anchor Y <span>µm</span>
               <input type="number" step="18" value={settings.offsetY}
                 onChange={(event) => setSettings({ ...settings, offsetY: Number(event.target.value) })} />
             </label>
           </div>
+          <p className="placement-note">Anchor coordinates are measured from the LCD centre.</p>
+          {calibrationMode && (
+            <div className="calibration-series">
+              <label>Exposure series <span>s · comma-separated</span>
+                <input type="text" value={calibrationSeries} onChange={(event) => setCalibrationSeries(event.target.value)} />
+              </label>
+              <button type="button" disabled={busy || outsideScreen} onClick={() => void exportCalibrationSeries()}>
+                Download calibration series
+              </button>
+              <p>The browser may request permission for multiple downloads.</p>
+            </div>
+          )}
           <div className="toggle-row">
             <button type="button" className={settings.mirrorX ? "active" : ""} onClick={() => setSettings({ ...settings, mirrorX: !settings.mirrorX })}>↔ Mirror X</button>
             <button type="button" className={settings.mirrorY ? "active" : ""} onClick={() => setSettings({ ...settings, mirrorY: !settings.mirrorY })}>↕ Mirror Y</button>
@@ -345,6 +535,33 @@ export default function Home() {
             <span className="switch" />
             Invert polarity <small>{settings.inverted ? "exposed background" : "exposed geometry"}</small>
           </label>
+
+          <details className="process-metadata">
+            <summary>Process metadata</summary>
+            <div className="process-grid">
+              <label>Photoresist
+                <input type="text" value={processMetadata.photoresist} placeholder="e.g. AZ1505"
+                  onChange={(event) => setProcessMetadata({ ...processMetadata, photoresist: event.target.value })} />
+              </label>
+              <label>Thickness <span>nm</span>
+                <input type="number" min="0" step="1" value={processMetadata.thicknessNm} placeholder="e.g. 600"
+                  onChange={(event) => setProcessMetadata({ ...processMetadata, thicknessNm: event.target.value })} />
+              </label>
+              <label>Soft bake
+                <input type="text" value={processMetadata.softBake} placeholder="e.g. 100 °C · 60 s"
+                  onChange={(event) => setProcessMetadata({ ...processMetadata, softBake: event.target.value })} />
+              </label>
+              <label>Development
+                <input type="text" value={processMetadata.development} placeholder="e.g. AZ 400K 1:4 · 45 s"
+                  onChange={(event) => setProcessMetadata({ ...processMetadata, development: event.target.value })} />
+              </label>
+            </div>
+            <label>Notes
+              <textarea value={processMetadata.notes} rows={2} placeholder="Substrate, contact mode, batch…"
+                onChange={(event) => setProcessMetadata({ ...processMetadata, notes: event.target.value })} />
+            </label>
+            <p>Saved locally in the companion <code>.run.json</code> file.</p>
+          </details>
 
           <div className={`status ${outsideScreen ? "error" : ""}`} role="status">
             <span>{outsideScreen ? "!" : busy ? "…" : "✓"}</span>
@@ -376,12 +593,15 @@ export default function Home() {
                 />
                 <output>{previewZoom.toFixed(1)}×</output>
               </label>
-              <label className="grid-control" title="Grid of the 1400 × 710 preview samples">
+              <label className="grid-control" title="Native 8520 × 4320 LCD pixel grid; enabling it sets zoom to 8×">
                 <input
                   type="checkbox"
                   checked={showPreviewGrid}
                   disabled={!visibleShapes.length}
-                  onChange={(event) => setShowPreviewGrid(event.target.checked)}
+                  onChange={(event) => {
+                    setShowPreviewGrid(event.target.checked);
+                    if (event.target.checked) setPreviewZoom(8);
+                  }}
                 />
                 <span>PIXEL GRID</span>
               </label>
@@ -393,6 +613,7 @@ export default function Home() {
                 <div
                   className="preview-surface"
                   style={{ width: `${previewZoom * 100}%`, height: `${previewZoom * 100}%` }}
+                  onClick={inspectPreview}
                 >
                   <canvas ref={preview} aria-label="LCD mask preview" />
                   {showPreviewGrid && <span className="preview-pixel-grid" aria-hidden="true" />}
@@ -407,6 +628,19 @@ export default function Home() {
             </div>
             <div className="screen-axis"><span>0, 0</span><span>X · 153.36 mm</span></div>
           </div>
+          {visibleShapes.length > 0 && (
+            <div className="pixel-inspector">
+              <div>
+                <p>NATIVE 1:1 INSPECTOR</p>
+                <strong>PX {inspection.x}, {inspection.y}</strong>
+                <span>
+                  {((inspection.x + 0.5) * 0.018 - MARS_4_9K.sizeX / 2).toFixed(3)} mm X · {(MARS_4_9K.sizeY / 2 - (inspection.y + 0.5) * 0.018).toFixed(3)} mm Y
+                </span>
+                <small>Click the main preview to inspect a 64 × 64 native-pixel region.</small>
+              </div>
+              <canvas ref={inspector} aria-label={`Native LCD pixels around ${inspection.x}, ${inspection.y}`} />
+            </div>
+          )}
           <div className="metrics">
             <article><p>LAYOUT SIZE</p><strong>{bounds ? `${(bounds.width / 1000).toFixed(3)} × ${(bounds.height / 1000).toFixed(3)} mm` : "—"}</strong></article>
             <article><p>MINIMUM FEATURE*</p><strong className={minimumFeature !== null && minimumFeature < 36 ? "warn" : ""}>{minimumFeature === null ? "—" : `${minimumFeature.toFixed(1)} µm`}</strong></article>
