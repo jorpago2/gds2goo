@@ -40,6 +40,13 @@ const DEFAULT_SETTINGS: MaskSettings = {
 
 const INSPECTOR_SIZE = 64;
 
+const SUBSTRATE_TEMPLATES = [
+  { id: "wafer-1", label: "1-inch wafer · Ø25.4 mm", shape: "circle", width: 25.4, height: 25.4 },
+  { id: "wafer-2", label: "2-inch wafer · Ø50.8 mm", shape: "circle", width: 50.8, height: 50.8 },
+  { id: "wafer-3", label: "3-inch wafer · Ø76.2 mm", shape: "circle", width: 76.2, height: 76.2 },
+  { id: "slide-75x25", label: "Microscope slide · 75 × 25 mm", shape: "rectangle", width: 75, height: 25 },
+] as const;
+
 type ProcessMetadata = {
   photoresist: string;
   thicknessNm: string;
@@ -194,6 +201,7 @@ export default function Home() {
   const [dragging, setDragging] = useState(false);
   const [previewZoom, setPreviewZoom] = useState(1);
   const [showPreviewGrid, setShowPreviewGrid] = useState(false);
+  const [substrateTemplateId, setSubstrateTemplateId] = useState("");
   const [inspection, setInspection] = useState({ x: Math.floor(MARS_4_9K.width / 2), y: Math.floor(MARS_4_9K.height / 2) });
   const [calibrationMode, setCalibrationMode] = useState(false);
   const [calibrationSeries, setCalibrationSeries] = useState("5, 7, 9, 11, 13");
@@ -210,6 +218,7 @@ export default function Home() {
     () => visibleShapes.length ? estimateMinimumFeature(visibleShapes) : null,
     [visibleShapes],
   );
+  const substrateTemplate = SUBSTRATE_TEMPLATES.find(({ id }) => id === substrateTemplateId);
   const outsideScreen = Boolean(visibleShapes.length && !fitsDisplay(
     visibleShapes,
     settings,
@@ -752,6 +761,15 @@ export default function Home() {
                 />
                 <span>PIXEL GRID</span>
               </label>
+              <label className="template-control" title="Centred physical outline for placement only; never included in exports">
+                <span>SUBSTRATE OUTLINE</span>
+                <select value={substrateTemplateId} onChange={(event) => setSubstrateTemplateId(event.target.value)}>
+                  <option value="">None</option>
+                  {SUBSTRATE_TEMPLATES.map((template) => (
+                    <option key={template.id} value={template.id}>{template.label}</option>
+                  ))}
+                </select>
+              </label>
             </div>
           </div>
           <div className="lcd-shell">
@@ -763,6 +781,31 @@ export default function Home() {
                   onClick={inspectPreview}
                 >
                   <canvas ref={preview} aria-label="LCD mask preview" />
+                  {substrateTemplate && (
+                    <div className="substrate-template" aria-hidden="true">
+                      <svg viewBox={`0 0 ${MARS_4_9K.sizeX} ${MARS_4_9K.sizeY}`} preserveAspectRatio="none">
+                        {substrateTemplate.shape === "circle" ? (
+                          <circle
+                            cx={MARS_4_9K.sizeX / 2}
+                            cy={MARS_4_9K.sizeY / 2}
+                            r={substrateTemplate.width / 2}
+                          />
+                        ) : (
+                          <rect
+                            x={(MARS_4_9K.sizeX - substrateTemplate.width) / 2}
+                            y={(MARS_4_9K.sizeY - substrateTemplate.height) / 2}
+                            width={substrateTemplate.width}
+                            height={substrateTemplate.height}
+                            rx="0.5"
+                          />
+                        )}
+                        <path d={`M ${MARS_4_9K.sizeX / 2 - 2} ${MARS_4_9K.sizeY / 2} h 4 M ${MARS_4_9K.sizeX / 2} ${MARS_4_9K.sizeY / 2 - 2} v 4`} />
+                      </svg>
+                      <span style={{ top: `${(MARS_4_9K.sizeY - substrateTemplate.height) / 2 / MARS_4_9K.sizeY * 100}%` }}>
+                        {substrateTemplate.label} · PREVIEW ONLY
+                      </span>
+                    </div>
+                  )}
                   {showPreviewGrid && <span className="preview-pixel-grid" aria-hidden="true" />}
                 </div>
               ) : (
