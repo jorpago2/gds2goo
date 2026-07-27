@@ -1,20 +1,20 @@
 # GDS2GOO
 
-Conversor local de layouts GDSII a archivos de exposición `.goo` de una capa para la Elegoo Mars 4 9K.
+Local converter from GDSII layouts to single-layer `.goo` exposure files for the Elegoo Mars 4 9K.
 
 **Web:** https://jorpago2.github.io/gds2goo/
 
-## Alcance
+## Scope
 
-- Lee `BOUNDARY`, `BOX`, `PATH`, `SREF` y `AREF`, incluidas magnificación, rotación y reflexión.
-- Mantiene las unidades físicas del GDS y rasteriza a 8520 × 4320 píxeles de 18 µm.
-- Permite seleccionar capas, desplazar, rotar, reflejar e invertir la máscara.
-- Exporta `.goo` V3.0 con RLE y checksum, además de un PNG 9K de control.
-- Todo el procesamiento ocurre en el navegador; el GDS no se sube.
+- Reads `BOUNDARY`, `BOX`, `PATH`, `SREF` and `AREF`, including magnification, rotation and reflection.
+- Preserves the physical GDS units and rasterizes to 8520 × 4320 pixels at 18 µm/pixel.
+- Supports layer selection, translation, rotation, mirroring and mask inversion.
+- Exports GOO V3.0 with RLE and checksum, plus a 9K verification PNG.
+- All processing happens in the browser; the GDS file is never uploaded.
 
-## Ejecución
+## Run locally
 
-Requiere Node.js 22.13 o superior y pnpm.
+Requires Node.js 22.13 or later and pnpm.
 
 ```bash
 pnpm install
@@ -22,8 +22,8 @@ pnpm dev
 pnpm test
 ```
 
-Cada cambio en `main` se publica automáticamente en GitHub Pages mediante GitHub Actions.
+Every change to `main` is published automatically to GitHub Pages through GitHub Actions.
 
-## Supuestos y seguridad experimental
+## Assumptions and experimental safety
 
-El perfil está fijado a la Mars 4 9K (153,36 × 77,76 mm, 18 µm/píxel), una capa de 0,05 mm y 9 s como valor inicial. Los 9 s proceden de Wu et al., *Small Methods* 9 (2025), e01336, para LOR2A/AZ1505 y no sustituyen una matriz de dosis propia. Verifica siempre el PNG, la polaridad y la orientación en pantalla sin muestra antes de exponer fotoresist.
+The profile is fixed to the Mars 4 9K (153.36 × 77.76 mm, 18 µm/pixel), one 0.05 mm layer and 9 s as an initial value. The 9 s value comes from Wu et al., *Small Methods* 9 (2025), e01336, for LOR2A/AZ1505 and does not replace a process-specific dose matrix. Always verify the PNG, polarity and on-screen orientation without a sample before exposing photoresist.

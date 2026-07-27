@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
-const title = "GDS2GOO · Máscaras UV para Elegoo Mars 4 9K";
-const description = "Convierte layouts GDSII en archivos GOO de exposición para fotolitografía LCD, directamente en el navegador.";
+const title = "GDS2GOO · UV Masks for Elegoo Mars 4 9K";
+const description = "Convert GDSII layouts into GOO exposure files for LCD photolithography, directly in your browser.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://jorpago2.github.io/gds2goo/"),
@@ -14,5 +14,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="es"><body>{children}</body></html>;
+  return <html lang="en"><body>{children}</body></html>;
 }

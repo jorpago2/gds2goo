@@ -45,7 +45,7 @@ function drawMask(
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext("2d", { alpha: false });
-  if (!context) throw new Error("El navegador no permite crear el lienzo de máscara.");
+  if (!context) throw new Error("The browser could not create the mask canvas.");
   const bounds = boundsOf(shapes);
   const center = { x: (bounds.minX + bounds.maxX) / 2, y: (bounds.minY + bounds.maxY) / 2 };
   const pixelsPerMicrometer = width / (MARS_4_9K.sizeX * 1000);
@@ -110,7 +110,7 @@ export default function Home() {
   const [shapes, setShapes] = useState<ReturnType<typeof flattenGds>>([]);
   const [selectedLayers, setSelectedLayers] = useState<number[]>([]);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-  const [message, setMessage] = useState("Carga un GDSII para comenzar.");
+  const [message, setMessage] = useState("Load a GDSII file to begin.");
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
 
@@ -140,22 +140,22 @@ export default function Home() {
     const nextLayers = [...new Set(flattened.map((shape) => shape.layer))].sort((a, b) => a - b);
     setShapes(flattened);
     setSelectedLayers(nextLayers);
-    setMessage(`${flattened.length.toLocaleString("es-ES")} geometrías listas en ${nextLayers.length} capa(s).`);
+    setMessage(`${flattened.length.toLocaleString("en-US")} geometries ready across ${nextLayers.length} layer(s).`);
   }
 
   async function loadFile(file?: File) {
     if (!file) return;
     if (!/\.gds(ii)?$/i.test(file.name)) {
-      setMessage("Selecciona un archivo .gds o .gdsii.");
+      setMessage("Select a .gds or .gdsii file.");
       return;
     }
     if (file.size > 100 * 1024 * 1024) {
-      setMessage("El GDS supera el límite local de 100 MB.");
+      setMessage("The GDS exceeds the local 100 MB limit.");
       return;
     }
     try {
       setBusy(true);
-      setMessage("Leyendo jerarquía GDSII…");
+      setMessage("Reading GDSII hierarchy…");
       const parsed = parseGds(await file.arrayBuffer());
       const cell = parsed.topCells.at(-1) ?? "";
       setModel(parsed);
@@ -165,7 +165,7 @@ export default function Home() {
     } catch (error) {
       setModel(null);
       setShapes([]);
-      setMessage(error instanceof Error ? error.message : "No se pudo leer el GDS.");
+      setMessage(error instanceof Error ? error.message : "The GDS could not be read.");
     } finally {
       setBusy(false);
     }
@@ -187,7 +187,7 @@ export default function Home() {
       setTopCell(cell);
       updateShapes(model, cell);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo aplanar la celda.");
+      setMessage(error instanceof Error ? error.message : "The cell hierarchy could not be flattened.");
     }
   }
 
@@ -200,7 +200,7 @@ export default function Home() {
   async function exportGoo() {
     if (!visibleShapes.length || outsideScreen) return;
     setBusy(true);
-    setMessage("Rasterizando 36,8 millones de píxeles localmente…");
+    setMessage("Rasterizing 36.8 million pixels locally…");
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const canvas = document.createElement("canvas");
     try {
@@ -220,9 +220,9 @@ export default function Home() {
       });
       const check = validateGooFile(goo);
       saveFile(goo, `${fileName.replace(/\.gds(ii)?$/i, "") || "mask"}.goo`, "application/octet-stream");
-      setMessage(`GOO validado: ${check.pixels.toLocaleString("es-ES")} píxeles, 1 capa, ${settings.exposure} s.`);
+      setMessage(`GOO validated: ${check.pixels.toLocaleString("en-US")} pixels, 1 layer, ${settings.exposure} s.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo generar el GOO.");
+      setMessage(error instanceof Error ? error.message : "The GOO file could not be generated.");
     } finally {
       canvas.width = 1;
       canvas.height = 1;
@@ -233,17 +233,17 @@ export default function Home() {
   async function exportPng() {
     if (!visibleShapes.length || outsideScreen) return;
     setBusy(true);
-    setMessage("Generando PNG 9K de control…");
+    setMessage("Generating 9K verification PNG…");
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const canvas = document.createElement("canvas");
     try {
       drawMask(canvas, visibleShapes, settings, MARS_4_9K.width, MARS_4_9K.height);
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-      if (!blob) throw new Error("El navegador no pudo codificar el PNG.");
+      if (!blob) throw new Error("The browser could not encode the PNG.");
       saveFile(blob, `${fileName.replace(/\.gds(ii)?$/i, "") || "mask"}-8520x4320.png`, "image/png");
-      setMessage("PNG 9K generado. Úsalo para verificar orientación y polaridad.");
+      setMessage("9K PNG generated. Use it to verify orientation and polarity.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo generar el PNG.");
+      setMessage(error instanceof Error ? error.message : "The PNG could not be generated.");
     } finally {
       canvas.width = 1;
       canvas.height = 1;
@@ -254,25 +254,25 @@ export default function Home() {
   return (
     <main>
       <header className="topbar">
-        <a className="brand" href="#top" aria-label="GDS2GOO, inicio">
+        <a className="brand" href="#top" aria-label="GDS2GOO, home">
           <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
           GDS<span>2</span>GOO
         </a>
         <div className="device-pill"><span /> Elegoo Mars 4 · 9K</div>
-        <p>Conversión local · ningún archivo sale del navegador</p>
+        <p>Local conversion · no file leaves your browser</p>
       </header>
 
       <section className="hero" id="top">
         <div>
           <p className="eyebrow">MASKLESS PHOTOLITHOGRAPHY TOOL</p>
-          <h1>Del layout GDS a la<br />pantalla <em>UV.</em></h1>
+          <h1>From GDS layout to the<br /><em>UV display.</em></h1>
         </div>
-        <p className="hero-copy">Rasteriza geometrías físicas a píxel nativo y genera una exposición <code>.goo</code> de una sola capa para la Mars 4 9K.</p>
+        <p className="hero-copy">Rasterize physical geometries at native pixel resolution and generate a single-layer <code>.goo</code> exposure for the Mars 4 9K.</p>
       </section>
 
-      <section className="workspace" aria-label="Conversor GDS a GOO">
+      <section className="workspace" aria-label="GDS to GOO converter">
         <aside className="controls">
-          <div className="step-heading"><span>01</span><div><p>ENTRADA</p><h2>Archivo y capas</h2></div></div>
+          <div className="step-heading"><span>01</span><div><p>INPUT</p><h2>File and layers</h2></div></div>
           <div
             className={`dropzone ${dragging ? "is-dragging" : ""}`}
             onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
@@ -285,19 +285,19 @@ export default function Home() {
           >
             <input ref={fileInput} type="file" accept=".gds,.gdsii" onChange={onFileChange} />
             <span className="upload-icon" aria-hidden="true">↑</span>
-            <strong>{fileName || "Arrastra tu .gds"}</strong>
-            <small>{fileName ? "Haz clic para sustituirlo" : "o haz clic para seleccionarlo · máx. 100 MB"}</small>
+            <strong>{fileName || "Drop your .gds file"}</strong>
+            <small>{fileName ? "Click to replace it" : "or click to browse · max. 100 MB"}</small>
           </div>
 
           {model && (
             <div className="file-options">
-              <label>Celda superior
+              <label>Top cell
                 <select value={topCell} onChange={(event) => changeTopCell(event.target.value)}>
                   {model.topCells.map((cell) => <option key={cell}>{cell}</option>)}
                 </select>
               </label>
               <fieldset>
-                <legend>Capas a exponer</legend>
+                <legend>Layers to expose</legend>
                 <div className="layer-list">
                   {layers.map((layer) => (
                     <button
@@ -314,86 +314,86 @@ export default function Home() {
           )}
 
           <div className="divider" />
-          <div className="step-heading"><span>02</span><div><p>MÁSCARA</p><h2>Exposición y orientación</h2></div></div>
+          <div className="step-heading"><span>02</span><div><p>MASK</p><h2>Exposure and orientation</h2></div></div>
           <div className="settings-grid">
-            <label>Exposición <span>s</span>
+            <label>Exposure <span>s</span>
               <input type="number" min="0.1" max="600" step="0.1" value={settings.exposure}
                 onChange={(event) => setSettings({ ...settings, exposure: Number(event.target.value) })} />
             </label>
-            <label>Rotación
+            <label>Rotation
               <select value={settings.rotation} onChange={(event) => setSettings({ ...settings, rotation: Number(event.target.value) })}>
                 {[0, 90, 180, 270].map((angle) => <option key={angle} value={angle}>{angle}°</option>)}
               </select>
             </label>
-            <label>Desplaz. X <span>µm</span>
+            <label>X offset <span>µm</span>
               <input type="number" step="18" value={settings.offsetX}
                 onChange={(event) => setSettings({ ...settings, offsetX: Number(event.target.value) })} />
             </label>
-            <label>Desplaz. Y <span>µm</span>
+            <label>Y offset <span>µm</span>
               <input type="number" step="18" value={settings.offsetY}
                 onChange={(event) => setSettings({ ...settings, offsetY: Number(event.target.value) })} />
             </label>
           </div>
           <div className="toggle-row">
-            <button type="button" className={settings.mirrorX ? "active" : ""} onClick={() => setSettings({ ...settings, mirrorX: !settings.mirrorX })}>↔ Espejo X</button>
-            <button type="button" className={settings.mirrorY ? "active" : ""} onClick={() => setSettings({ ...settings, mirrorY: !settings.mirrorY })}>↕ Espejo Y</button>
+            <button type="button" className={settings.mirrorX ? "active" : ""} onClick={() => setSettings({ ...settings, mirrorX: !settings.mirrorX })}>↔ Mirror X</button>
+            <button type="button" className={settings.mirrorY ? "active" : ""} onClick={() => setSettings({ ...settings, mirrorY: !settings.mirrorY })}>↕ Mirror Y</button>
           </div>
           <label className="switch-row">
             <input type="checkbox" checked={settings.inverted} onChange={(event) => setSettings({ ...settings, inverted: event.target.checked })} />
             <span className="switch" />
-            Invertir polaridad <small>{settings.inverted ? "fondo expuesto" : "geometría expuesta"}</small>
+            Invert polarity <small>{settings.inverted ? "exposed background" : "exposed geometry"}</small>
           </label>
 
           <div className={`status ${outsideScreen ? "error" : ""}`} role="status">
             <span>{outsideScreen ? "!" : busy ? "…" : "✓"}</span>
-            <p>{outsideScreen ? "La máscara excede el área física de la pantalla." : message}</p>
+            <p>{outsideScreen ? "The mask exceeds the physical display area." : message}</p>
           </div>
           <button className="primary-action" type="button" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportGoo()}>
-            {busy ? "Procesando…" : "Generar archivo .GOO"}<span>→</span>
+            {busy ? "Processing…" : "Generate .GOO file"}<span>→</span>
           </button>
           <button className="secondary-action" type="button" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportPng()}>
-            Descargar PNG 9K de control
+            Download 9K verification PNG
           </button>
         </aside>
 
         <section className="preview-panel">
           <div className="preview-toolbar">
-            <div><span className="live-dot" /> PREVISUALIZACIÓN LCD</div>
-            <p>153,36 × 77,76 mm <b>·</b> 8520 × 4320 px</p>
+            <div><span className="live-dot" /> LCD PREVIEW</div>
+            <p>153.36 × 77.76 mm <b>·</b> 8520 × 4320 px</p>
           </div>
           <div className="lcd-shell">
             <div className="lcd-grid">
-              {visibleShapes.length ? <canvas ref={preview} aria-label="Previsualización de la máscara LCD" /> : (
+              {visibleShapes.length ? <canvas ref={preview} aria-label="LCD mask preview" /> : (
                 <div className="empty-preview">
                   <div className="empty-pattern"><i /><i /><i /><i /><i /></div>
                   <strong>LCD READY</strong>
-                  <p>La máscara aparecerá aquí a escala física.</p>
+                  <p>The mask will appear here at physical scale.</p>
                 </div>
               )}
             </div>
-            <div className="screen-axis"><span>0,0</span><span>X · 153,36 mm</span></div>
+            <div className="screen-axis"><span>0, 0</span><span>X · 153.36 mm</span></div>
           </div>
           <div className="metrics">
-            <article><p>TAMAÑO DEL LAYOUT</p><strong>{bounds ? `${(bounds.width / 1000).toFixed(3)} × ${(bounds.height / 1000).toFixed(3)} mm` : "—"}</strong></article>
-            <article><p>FEATURE MÍNIMA*</p><strong className={minimumFeature !== null && minimumFeature < 36 ? "warn" : ""}>{minimumFeature === null ? "—" : `${minimumFeature.toFixed(1)} µm`}</strong></article>
-            <article><p>PÍXEL LCD</p><strong>18 × 18 µm</strong></article>
-            <article><p>CAPAS ACTIVAS</p><strong>{selectedLayers.length || "—"}</strong></article>
+            <article><p>LAYOUT SIZE</p><strong>{bounds ? `${(bounds.width / 1000).toFixed(3)} × ${(bounds.height / 1000).toFixed(3)} mm` : "—"}</strong></article>
+            <article><p>MINIMUM FEATURE*</p><strong className={minimumFeature !== null && minimumFeature < 36 ? "warn" : ""}>{minimumFeature === null ? "—" : `${minimumFeature.toFixed(1)} µm`}</strong></article>
+            <article><p>LCD PIXEL</p><strong>18 × 18 µm</strong></article>
+            <article><p>ACTIVE LAYERS</p><strong>{selectedLayers.length || "—"}</strong></article>
           </div>
-          <p className="metric-note">*Estimación por anchura de PATH o caja mínima de cada polígono. El paper apenas resolvió 1 píxel; usa ≥2 píxeles (36 µm) para mayor robustez.</p>
+          <p className="metric-note">*Estimated from PATH width or the minimum bounding box of each polygon. The paper barely resolved 1 pixel; use ≥2 pixels (36 µm) for greater robustness.</p>
         </section>
       </section>
 
       <section className="science-strip">
-        <div><span>01</span><p><b>GDSII</b>Jerarquía, BOUNDARY, BOX, PATH, SREF y AREF</p></div>
+        <div><span>01</span><p><b>GDSII</b>Hierarchy, BOUNDARY, BOX, PATH, SREF and AREF</p></div>
         <i>→</i>
-        <div><span>02</span><p><b>RASTER 1:1</b>18 µm/píxel · sin reescalado automático</p></div>
+        <div><span>02</span><p><b>1:1 RASTER</b>18 µm/pixel · no automatic rescaling</p></div>
         <i>→</i>
-        <div><span>03</span><p><b>GOO V3.0</b>Una capa de 0,05 mm · RLE y checksum verificados</p></div>
+        <div><span>03</span><p><b>GOO V3.0</b>One 0.05 mm layer · verified RLE and checksum</p></div>
       </section>
 
       <footer>
-        <p>Basado en Wu et al., <i>Small Methods</i> 9 (2025), e01336. La dosis óptima debe recalibrarse para cada resist, espesor, LCD y revelado.</p>
-        <p>405 nm · local-first · uso experimental</p>
+        <p>Based on Wu et al., <i>Small Methods</i> 9 (2025), e01336. The optimum dose must be recalibrated for each photoresist, thickness, LCD and development process.</p>
+        <p>405 nm · local-first · experimental use</p>
       </footer>
     </main>
   );
