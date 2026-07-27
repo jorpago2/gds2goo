@@ -3,9 +3,10 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 import { fitsDisplay, flattenGds, parseGds, placedBoundsOf } from "../lib/gds.js";
 import { buildGooFile, encodeBinaryLayer, validateGooFile } from "../lib/goo.js";
-import { createCalibrationShapes, parseExposureSeries } from "../lib/calibration.js";
-import { createRunManifest } from "../lib/manifest.js";
+import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "../lib/calibration.js";
+import { createRunManifest, parseRunManifest } from "../lib/manifest.js";
 import { createMonochromePreview, rasterizeBinaryMask } from "../lib/raster.js";
+import { buildZip } from "../lib/zip.js";
 
 function record(type, dataType, payload = []) {
   const length = payload.length + 4;
@@ -104,6 +105,22 @@ test("parses a hierarchical GDSII stream with physical units, references, PATH a
   assert.deepEqual(rotatedBoundary?.points, [{ x: 10, y: 20 }, { x: 10, y: 22 }, { x: 8, y: 22 }, { x: 8, y: 20 }]);
 });
 
+test("reports exposure-relevant GDSII compatibility warnings", () => {
+  const path = [[0, 0], [1000, 0]].flatMap(([x, y]) => [...int32(x), ...int32(y)]);
+  const bytes = new Uint8Array([
+    ...record(0x05, 0x02, Array(24).fill(0)), ...record(0x06, 0x06, text("TOP")),
+    ...record(0x09, 0x00), ...record(0x0d, 0x02, int16(1)), ...record(0x0f, 0x03, int32(-100)),
+    ...record(0x21, 0x02, int16(4)), ...record(0x30, 0x03, int32(50)), ...record(0x31, 0x03, int32(75)),
+    ...record(0x10, 0x03, path), ...record(0x11, 0x00),
+    ...record(0x0c, 0x00), ...record(0x11, 0x00), ...record(0x15, 0x00), ...record(0x11, 0x00),
+    ...record(0x07, 0x00),
+  ]);
+  const compatibility = parseGds(bytes.buffer).compatibility;
+  assert.deepEqual(compatibility.elementCounts, { boundaries: 0, boxes: 0, paths: 1, references: 0, texts: 1, nodes: 1 });
+  assert.equal(compatibility.warnings.length, 4);
+  assert.match(compatibility.warnings.join(" "), /TEXT.*NODE.*custom extensions.*absolute WIDTH/);
+});
+
 test("encodes a binary layer and validates the resulting GOO container", () => {
   const rows = [new Uint8Array([0, 0, 1, 1]), new Uint8Array([1, 0, 0, 0])];
   const encoded = encodeBinaryLayer((y) => rows[y], 4, 2);
@@ -195,10 +212,22 @@ test("creates a bounded 18–180 µm calibration pattern and validates its expos
   assert.throws(() => parseExposureSeries("0, 9"), /between 0.1 and 600/);
 });
 
+test("creates a bounded, asymmetric printer orientation pattern", () => {
+  const shapes = createOrientationCheckShapes();
+  assert.equal(shapes.length, 30);
+  assert.equal(shapes.every((shape) => shape.points.every((point) => point.x % 18 === 0 && point.y % 18 === 0)), true);
+  assert.equal(fitsDisplay(shapes, { anchor: "center", offsetX: 0, offsetY: 0, rotation: 0, mirrorX: false, mirrorY: false }, 153360, 77760), true);
+});
+
 test("creates a reproducible run manifest", () => {
   const manifest = createRunManifest({
     source: { kind: "gds", name: "device.gds", sizeBytes: 1234, sha256: "abc" },
-    mask: { selectedLayers: [1, 3], polarity: "exposed-geometry" },
+    mask: {
+      topCell: "TOP",
+      selectedLayers: [1, 3],
+      polarity: "exposed-geometry",
+      placement: { anchor: "center", anchorXMicrometers: 0, anchorYMicrometers: 0, rotationDegrees: 0, mirrorX: false, mirrorY: false },
+    },
     exposures: [7, 9, 11],
     process: { photoresist: "AZ1505", thicknessNm: "600", softBake: "100 C, 60 s", development: "45 s", notes: "test" },
     outputs: ["device-7s.goo", "device-9s.goo", "device-11s.goo"],
@@ -207,4 +236,21 @@ test("creates a reproducible run manifest", () => {
   assert.equal(manifest.process.thicknessNanometers, 600);
   assert.deepEqual(manifest.exposuresSeconds, [7, 9, 11]);
   assert.equal(manifest.source.sha256, "abc");
+  const restored = parseRunManifest(JSON.stringify(manifest));
+  assert.equal(restored.settings.exposure, 7);
+  assert.deepEqual(restored.selectedLayers, [1, 3]);
+  assert.equal(restored.process.thicknessNm, "600");
+  assert.throws(() => parseRunManifest("{}"), /schema/);
+});
+
+test("builds a readable store-only ZIP archive", () => {
+  const zip = buildZip([{ name: "run.json", data: "{}" }], { date: new Date("2026-01-02T03:04:04Z") });
+  const view = new DataView(zip.buffer);
+  assert.equal(view.getUint32(0, true), 0x04034b50);
+  const nameLength = view.getUint16(26, true);
+  const dataLength = view.getUint32(18, true);
+  assert.equal(new TextDecoder().decode(zip.subarray(30, 30 + nameLength)), "run.json");
+  assert.equal(new TextDecoder().decode(zip.subarray(30 + nameLength, 30 + nameLength + dataLength)), "{}");
+  assert.equal(view.getUint32(zip.length - 22, true), 0x06054b50);
+  assert.throws(() => buildZip([{ name: "../unsafe", data: "x" }]), /filename/);
 });

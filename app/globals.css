@@ -63,9 +63,25 @@ button { color: inherit; }
 .upload-icon { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--ink); margin-bottom: 8px; font-weight: 900; }
 .dropzone strong { font-size: 13px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dropzone small { margin-top: 4px; color: var(--muted); font-size: 10px; }
-.calibration-load { width: 100%; min-height: 36px; margin-top: 8px; border: 1px solid var(--ink); background: transparent; cursor: pointer; font-size: 10px; font-weight: 750; }
+.source-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 8px; }
+.source-actions button { min-width: 0; min-height: 38px; border: 1px solid var(--ink); background: transparent; padding: 7px; cursor: pointer; font-size: 9px; font-weight: 750; }
+.source-actions button:last-of-type { grid-column: 1 / -1; }
+.source-actions button:hover:not(:disabled) { background: var(--ink); color: white; }
+.source-actions input { display: none; }
 .file-options { margin-top: 15px; display: grid; gap: 13px; }
 .file-options label, .settings-grid label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.compatibility-report { border: 1px solid #91b987; background: #edf6e8; padding: 10px; }
+.compatibility-report.has-warnings { border-color: #d79557; background: #fff3e4; }
+.compatibility-report > div { display: flex; justify-content: space-between; gap: 12px; }
+.compatibility-report strong, .diagnostic-note strong { font-size: 10px; }
+.compatibility-report span { color: var(--muted); font: 700 8px/1 var(--font-geist-mono), monospace; text-transform: uppercase; }
+.compatibility-report p, .compatibility-report small, .compatibility-report li, .diagnostic-note p { color: var(--muted); font-size: 9px; line-height: 1.4; }
+.compatibility-report p { margin: 6px 0 0; }
+.compatibility-report small { display: block; margin-top: 5px; }
+.compatibility-report ul { margin: 7px 0 0; padding-left: 16px; }
+.compatibility-report li + li { margin-top: 4px; }
+.diagnostic-note { border-left: 3px solid var(--orange); background: #fff3e9; padding: 10px 11px; }
+.diagnostic-note p { margin: 5px 0 0; }
 select, input[type="number"] { width: 100%; min-height: 38px; border: 1px solid #bdb7aa; background: white; margin-top: 6px; padding: 8px 10px; outline: none; }
 select:focus, input:focus, textarea:focus { border-color: var(--orange); box-shadow: 0 0 0 2px rgba(255,90,31,.12); outline: none; }
 fieldset { border: 0; padding: 0; margin: 0; }
@@ -113,6 +129,8 @@ legend { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-sp
 .primary-action span { font-size: 22px; }
 .primary-action:hover:not(:disabled) { background: #e8460b; }
 .secondary-action { margin-top: 8px; min-height: 38px; background: transparent; border: 1px solid var(--ink); font-size: 11px; }
+.bundle-action { background: var(--ink); color: white; }
+.print-action { border-style: dashed; }
 button:disabled { opacity: .38; cursor: not-allowed; }
 button:focus-visible, a:focus-visible, [role="button"]:focus-visible, input[type="range"]:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--orange); outline-offset: 3px; }
 
@@ -169,6 +187,7 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, input[type
 footer { display: flex; justify-content: space-between; gap: 30px; padding: 24px 4vw 35px; color: var(--muted); font-size: 10px; line-height: 1.5; }
 footer p { margin: 0; max-width: 720px; }
 footer a { color: var(--ink); font-weight: 700; text-underline-offset: 3px; }
+.print-sheet { display: none; }
 
 @media (max-width: 900px) {
   .topbar > p { display: none; }
@@ -187,6 +206,8 @@ footer a { color: var(--ink); font-weight: 700; text-underline-offset: 3px; }
   .hero, .controls, .preview-panel { padding-left: 20px; padding-right: 20px; }
   .hero { padding-top: 24px; padding-bottom: 24px; }
   .hero h1 { font-size: 32px; }
+  .source-actions { grid-template-columns: 1fr; }
+  .source-actions button:last-of-type { grid-column: auto; }
   .quick-guide summary, .guide-body { padding-left: 20px; padding-right: 20px; }
   .quick-guide summary small { display: none; }
   .guide-body ol { grid-template-columns: 1fr; }
@@ -204,3 +225,25 @@ footer a { color: var(--ink); font-weight: 700; text-underline-offset: 3px; }
 }
 
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
+
+@media print {
+  @page { size: A4; margin: 15mm; }
+  body { background: white; color: black; font-family: Arial, Helvetica, sans-serif; }
+  main > :not(.print-sheet) { display: none !important; }
+  .print-sheet { display: block; font-size: 10pt; }
+  .print-sheet header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid black; padding-bottom: 8mm; }
+  .print-sheet header p { margin: 0; text-align: right; font-size: 8pt; }
+  .print-sheet header div p { text-align: left; font-weight: 800; letter-spacing: .08em; }
+  .print-sheet h1 { margin: 2mm 0 0; font-size: 22pt; }
+  .print-sheet h2 { margin: 0 0 3mm; font-size: 12pt; }
+  .print-parameters { display: grid; grid-template-columns: 1fr 1fr; margin: 8mm 0; border: 1px solid #777; }
+  .print-parameters > div { padding: 3mm; border-bottom: 1px solid #bbb; }
+  .print-parameters > div:nth-child(odd):not(.print-wide) { border-right: 1px solid #bbb; }
+  .print-parameters .print-wide { grid-column: 1 / -1; }
+  .print-parameters dt { font-size: 7pt; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+  .print-parameters dd { margin: 1mm 0 0; }
+  .print-hash { overflow-wrap: anywhere; font: 7pt/1.35 monospace; }
+  .print-checklist, .print-results { margin-top: 7mm; border: 1px solid #777; padding: 5mm; break-inside: avoid; }
+  .print-checklist p, .print-results p { margin: 3mm 0 0; }
+  .print-sheet > footer { display: block; margin-top: 9mm; padding: 4mm 0 0; border-top: 1px solid #777; color: #444; font-size: 7pt; }
+}

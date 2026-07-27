@@ -15,5 +15,9 @@ test("exports the GDS2GOO application shell", async () => {
   assert.match(html, /QUICK GUIDE/);
   assert.match(html, /perform a dry exposure/);
   assert.match(html, /Process metadata/);
+  assert.match(html, /Printer orientation check/);
+  assert.match(html, /Restore \.run\.json/);
+  assert.match(html, /Download experiment bundle/);
+  assert.match(html, /Print experimental run sheet/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });

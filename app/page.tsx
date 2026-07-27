@@ -11,9 +11,10 @@ import {
   transformPlacedPoint,
 } from "@/lib/gds.js";
 import { buildGooFile, encodeBinaryLayer, MARS_4_9K, validateGooFile } from "@/lib/goo.js";
-import { createCalibrationShapes, parseExposureSeries } from "@/lib/calibration.js";
-import { createRunManifest } from "@/lib/manifest.js";
+import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "@/lib/calibration.js";
+import { createRunManifest, parseRunManifest } from "@/lib/manifest.js";
 import { createMonochromePreview, rasterizeBinaryMask } from "@/lib/raster.js";
+import { buildZip } from "@/lib/zip.js";
 
 type MaskSettings = {
   exposure: number;
@@ -48,7 +49,7 @@ type ProcessMetadata = {
 };
 
 type SourceInfo = {
-  kind: "gds" | "generated-calibration";
+  kind: "gds" | "generated-calibration" | "generated-diagnostic";
   name: string;
   sizeBytes: number | null;
   sha256: string | null;
@@ -125,6 +126,7 @@ function rasterizeMask(shapes: ReturnType<typeof flattenGds>, settings: MaskSett
     MARS_4_9K.height,
   );
   return {
+    pixels,
     encoded,
     smallPreview: createMonochromePreview(pixels, MARS_4_9K.width, MARS_4_9K.height, 116, 116, settings.inverted ? 1 : 0),
     bigPreview: createMonochromePreview(pixels, MARS_4_9K.width, MARS_4_9K.height, 290, 290, settings.inverted ? 1 : 0),
@@ -157,6 +159,19 @@ function saveFile(bytes: BlobPart, name: string, type: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+async function encodePng(pixels: Uint8Array) {
+  const canvas = document.createElement("canvas");
+  try {
+    drawBinaryPixels(canvas, pixels, MARS_4_9K.width, MARS_4_9K.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("The browser could not encode the PNG.");
+    return new Uint8Array(await blob.arrayBuffer());
+  } finally {
+    canvas.width = 1;
+    canvas.height = 1;
+  }
+}
+
 async function sha256Hex(buffer: ArrayBuffer) {
   if (!globalThis.crypto?.subtle) return null;
   const digest = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", buffer));
@@ -165,6 +180,7 @@ async function sha256Hex(buffer: ArrayBuffer) {
 
 export default function Home() {
   const fileInput = useRef<HTMLInputElement>(null);
+  const runInput = useRef<HTMLInputElement>(null);
   const preview = useRef<HTMLCanvasElement>(null);
   const inspector = useRef<HTMLCanvasElement>(null);
   const [model, setModel] = useState<ReturnType<typeof parseGds> | null>(null);
@@ -274,18 +290,35 @@ export default function Home() {
     }
   }
 
-  function loadCalibrationPattern() {
-    const calibrationShapes = createCalibrationShapes();
-    const calibrationLayers = [...new Set(calibrationShapes.map((shape) => shape.layer))];
+  function loadGeneratedPattern(kind: SourceInfo["kind"], name: string, generatedShapes: ReturnType<typeof flattenGds>, readyMessage: string) {
+    const generatedLayers = [...new Set(generatedShapes.map((shape) => shape.layer))];
     setModel(null);
-    setCalibrationMode(true);
-    setFileName("calibration-line-space-18-180um");
-    setSourceInfo({ kind: "generated-calibration", name: "calibration-line-space-18-180um", sizeBytes: null, sha256: null });
+    setCalibrationMode(kind === "generated-calibration");
+    setFileName(name);
+    setSourceInfo({ kind, name, sizeBytes: null, sha256: null });
     setTopCell("");
-    setShapes(calibrationShapes);
-    setSelectedLayers(calibrationLayers);
+    setShapes(generatedShapes);
+    setSelectedLayers(generatedLayers);
     setSettings({ ...DEFAULT_SETTINGS, exposure: settings.exposure });
-    setMessage("Built-in 18–180 µm line/space calibration pattern ready.");
+    setMessage(readyMessage);
+  }
+
+  function loadCalibrationPattern() {
+    loadGeneratedPattern(
+      "generated-calibration",
+      "calibration-line-space-18-180um",
+      createCalibrationShapes(),
+      "Built-in 18–180 µm line/space calibration pattern ready.",
+    );
+  }
+
+  function loadOrientationPattern() {
+    loadGeneratedPattern(
+      "generated-diagnostic",
+      "mars4-9k-orientation-check",
+      createOrientationCheckShapes(),
+      "Orientation, polarity and clipping diagnostic ready.",
+    );
   }
 
   function onFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -296,6 +329,47 @@ export default function Home() {
     event.preventDefault();
     setDragging(false);
     void loadFile(event.dataTransfer.files[0]);
+  }
+
+  async function restoreRun(file?: File) {
+    if (!file) return;
+    if (!/\.run\.json$/i.test(file.name) || file.size > 1024 * 1024) {
+      setMessage("Select a GDS2GOO .run.json file smaller than 1 MB.");
+      return;
+    }
+    try {
+      const restored = parseRunManifest(await file.text());
+      let restoredShapes: ReturnType<typeof flattenGds>;
+      if (restored.source.kind === "gds") {
+        if (!model || sourceInfo?.kind !== "gds") throw new Error("Load the source GDS before restoring this run manifest.");
+        if (restored.source.sha256 && sourceInfo.sha256 && restored.source.sha256 !== sourceInfo.sha256) {
+          throw new Error("The run manifest SHA-256 does not match the loaded GDS.");
+        }
+        const cell = restored.topCell ?? topCell;
+        if (!model.structures.has(cell)) throw new Error(`Top cell “${cell}” is not present in the loaded GDS.`);
+        restoredShapes = flattenGds(model, cell);
+        setTopCell(cell);
+        setShapes(restoredShapes);
+      } else if (restored.source.kind === "generated-calibration") {
+        restoredShapes = createCalibrationShapes();
+        loadGeneratedPattern("generated-calibration", restored.source.name, restoredShapes, "Calibration run restored.");
+      } else {
+        restoredShapes = createOrientationCheckShapes();
+        loadGeneratedPattern("generated-diagnostic", restored.source.name, restoredShapes, "Diagnostic run restored.");
+      }
+      const availableLayers = new Set(restoredShapes.map((shape) => shape.layer));
+      const restoredLayers = restored.selectedLayers.filter((layer) => availableLayers.has(layer));
+      if (!restoredLayers.length) throw new Error("None of the manifest layers exist in the selected source.");
+      setSelectedLayers(restoredLayers);
+      setSettings(restored.settings as MaskSettings);
+      setProcessMetadata(restored.process);
+      if (restored.exposures.length > 1) setCalibrationSeries(restored.exposures.join(", "));
+      setMessage(`Run restored from ${file.name}. Verify the preview before export.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The run manifest could not be restored.");
+    } finally {
+      if (runInput.current) runInput.current.value = "";
+    }
   }
 
   function changeTopCell(cell: string) {
@@ -344,6 +418,17 @@ export default function Home() {
     });
   }
 
+  function buildValidatedGoo(raster: ReturnType<typeof rasterizeMask>, exposure: number) {
+    const goo = buildGooFile({
+      layerData: raster.encoded.data,
+      exposureSeconds: exposure,
+      whitePixels: raster.encoded.whitePixels,
+      smallPreview: raster.smallPreview,
+      bigPreview: raster.bigPreview,
+    });
+    return { goo, check: validateGooFile(goo) };
+  }
+
   async function exportGoo() {
     if (!visibleShapes.length || outsideScreen) return;
     setBusy(true);
@@ -351,14 +436,7 @@ export default function Home() {
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     try {
       const raster = rasterizeMask(visibleShapes, settings);
-      const goo = buildGooFile({
-        layerData: raster.encoded.data,
-        exposureSeconds: settings.exposure,
-        whitePixels: raster.encoded.whitePixels,
-        smallPreview: raster.smallPreview,
-        bigPreview: raster.bigPreview,
-      });
-      const check = validateGooFile(goo);
+      const { goo, check } = buildValidatedGoo(raster, settings.exposure);
       const baseName = outputBaseName();
       const gooName = `${baseName}.goo`;
       saveFile(goo, gooName, "application/octet-stream");
@@ -380,24 +458,50 @@ export default function Home() {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       const raster = rasterizeMask(visibleShapes, settings);
       const outputNames: string[] = [];
+      const entries: Array<{ name: string; data: Uint8Array | string }> = [];
       for (const exposure of exposures) {
-        const goo = buildGooFile({
-          layerData: raster.encoded.data,
-          exposureSeconds: exposure,
-          whitePixels: raster.encoded.whitePixels,
-          smallPreview: raster.smallPreview,
-          bigPreview: raster.bigPreview,
-        });
-        validateGooFile(goo);
+        const { goo } = buildValidatedGoo(raster, exposure);
         const exposureLabel = String(exposure).replace(".", "p");
         const outputName = `calibration-line-space-${exposureLabel}s.goo`;
         outputNames.push(outputName);
-        saveFile(goo, outputName, "application/octet-stream");
+        entries.push({ name: outputName, data: goo });
       }
-      saveFile(JSON.stringify(buildManifest(exposures, outputNames), null, 2), "calibration-line-space.run.json", "application/json");
-      setMessage(`${exposures.length} validated calibration files generated.`);
+      const pngName = "calibration-line-space-8520x4320.png";
+      entries.push({ name: pngName, data: await encodePng(raster.pixels) });
+      outputNames.push(pngName);
+      entries.push({ name: "calibration-line-space.run.json", data: JSON.stringify(buildManifest(exposures, outputNames), null, 2) });
+      saveFile(buildZip(entries), "calibration-line-space.experiment.zip", "application/zip");
+      setMessage(`${exposures.length} validated calibration files packaged with PNG and manifest.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The calibration series could not be generated.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function exportBundle() {
+    if (!visibleShapes.length || outsideScreen) return;
+    setBusy(true);
+    setMessage("Building reproducible experiment package…");
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    try {
+      const raster = rasterizeMask(visibleShapes, settings);
+      const baseName = outputBaseName();
+      const gooName = `${baseName}.goo`;
+      const pngName = `${baseName}-8520x4320.png`;
+      const manifestName = `${baseName}.run.json`;
+      const { goo } = buildValidatedGoo(raster, settings.exposure);
+      const png = await encodePng(raster.pixels);
+      const manifest = JSON.stringify(buildManifest([settings.exposure], [gooName, pngName]), null, 2);
+      const zip = buildZip([
+        { name: gooName, data: goo },
+        { name: pngName, data: png },
+        { name: manifestName, data: manifest },
+      ]);
+      saveFile(zip, `${baseName}.experiment.zip`, "application/zip");
+      setMessage("Experiment package validated: GOO, 9K PNG and run manifest.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The experiment package could not be generated.");
     } finally {
       setBusy(false);
     }
@@ -408,18 +512,13 @@ export default function Home() {
     setBusy(true);
     setMessage("Generating 9K verification PNG…");
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    const canvas = document.createElement("canvas");
     try {
-      drawBinaryPixels(canvas, nativeMask(visibleShapes, settings), MARS_4_9K.width, MARS_4_9K.height);
-      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-      if (!blob) throw new Error("The browser could not encode the PNG.");
-      saveFile(blob, `${fileName.replace(/\.gds(ii)?$/i, "") || "mask"}-8520x4320.png`, "image/png");
+      const png = await encodePng(nativeMask(visibleShapes, settings));
+      saveFile(png, `${fileName.replace(/\.gds(ii)?$/i, "") || "mask"}-8520x4320.png`, "image/png");
       setMessage("9K PNG generated. Use it to verify orientation and polarity.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The PNG could not be generated.");
     } finally {
-      canvas.width = 1;
-      canvas.height = 1;
       setBusy(false);
     }
   }
@@ -454,7 +553,7 @@ export default function Home() {
             <li><span>02</span><div><strong>Load and select</strong><p>Drop the GDS, choose its top cell and enable only the layers that must be exposed.</p></div></li>
             <li><span>03</span><div><strong>Place the mask</strong><p>Set the anchor, rotation, mirrors and offsets. Export remains disabled if geometry is clipped.</p></div></li>
             <li><span>04</span><div><strong>Calibrate the dose</strong><p>Use the built-in pattern and an exposure series for each resist, thickness, bake and development process.</p></div></li>
-            <li><span>05</span><div><strong>Inspect and export</strong><p>Check polarity and native pixels, then export GOO, PNG and the reproducibility manifest.</p></div></li>
+            <li><span>05</span><div><strong>Inspect and record</strong><p>Check polarity and native pixels, then download the experiment ZIP and print the run sheet.</p></div></li>
           </ol>
           <p className="guide-safety"><strong>First run:</strong> verify the GOO in UVtools and perform a dry exposure without photoresist. The default 9 s is a starting point, not a universal dose.</p>
           <a href="#converter">Open the converter <span aria-hidden="true">↓</span></a>
@@ -480,17 +579,31 @@ export default function Home() {
             <small>{fileName ? "Click to replace it" : "or click to browse · max. 100 MB"}</small>
           </div>
 
-          <button className="calibration-load" type="button" disabled={busy} onClick={loadCalibrationPattern}>
-            Use built-in 18–180 µm calibration pattern
-          </button>
+          <div className="source-actions">
+            <button type="button" disabled={busy} onClick={loadCalibrationPattern}>18–180 µm calibration pattern</button>
+            <button type="button" disabled={busy} onClick={loadOrientationPattern}>Printer orientation check</button>
+            <button type="button" disabled={busy} onClick={() => runInput.current?.click()}>Restore .run.json</button>
+            <input ref={runInput} type="file" accept=".json,application/json" onChange={(event) => void restoreRun(event.target.files?.[0])} />
+          </div>
 
-          {(model || calibrationMode) && (
+          {sourceInfo && (
             <div className="file-options">
               {model && <label>Top cell
                 <select value={topCell} onChange={(event) => changeTopCell(event.target.value)}>
                   {model.topCells.map((cell) => <option key={cell}>{cell}</option>)}
                 </select>
               </label>}
+              {model && (
+                <div className={`compatibility-report ${model.compatibility.warnings.length ? "has-warnings" : ""}`}>
+                  <div><strong>GDS compatibility</strong><span>{model.compatibility.warnings.length ? `${model.compatibility.warnings.length} warning(s)` : "Ready"}</span></div>
+                  <p>
+                    {model.compatibility.elementCounts.boundaries} BOUNDARY · {model.compatibility.elementCounts.boxes} BOX · {model.compatibility.elementCounts.paths} PATH · {model.compatibility.elementCounts.references} REF
+                  </p>
+                  {model.compatibility.warnings.length ? (
+                    <ul>{model.compatibility.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+                  ) : <small>No unsupported exposure geometry detected.</small>}
+                </div>
+              )}
               <fieldset>
                 <legend>Layers to expose</legend>
                 <div className="layer-list">
@@ -505,6 +618,12 @@ export default function Home() {
                   ))}
                 </div>
               </fieldset>
+              {sourceInfo?.kind === "generated-diagnostic" && (
+                <div className="diagnostic-note">
+                  <strong>How to read it</strong>
+                  <p>Corner blocks increase clockwise: 1 top-left, 2 top-right, 3 bottom-right and 4 bottom-left. The long arrows indicate +X and +Y; the lower bar is 10.008 mm.</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -543,9 +662,9 @@ export default function Home() {
                 <input type="text" value={calibrationSeries} onChange={(event) => setCalibrationSeries(event.target.value)} />
               </label>
               <button type="button" disabled={busy || outsideScreen} onClick={() => void exportCalibrationSeries()}>
-                Download calibration series
+                Download calibration bundle (.zip)
               </button>
-              <p>The browser may request permission for multiple downloads.</p>
+              <p>Includes every GOO exposure, a 9K PNG and the run manifest.</p>
             </div>
           )}
           <div className="toggle-row">
@@ -594,6 +713,12 @@ export default function Home() {
           </button>
           <button className="secondary-action" type="button" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportPng()}>
             Download 9K verification PNG
+          </button>
+          <button className="secondary-action bundle-action" type="button" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportBundle()}>
+            Download experiment bundle (.zip)
+          </button>
+          <button className="secondary-action print-action" type="button" disabled={busy || !visibleShapes.length} onClick={() => window.print()}>
+            Print experimental run sheet
           </button>
         </aside>
 
@@ -671,6 +796,40 @@ export default function Home() {
           </div>
           <p className="metric-note">*Estimated from PATH width or the minimum bounding box of each polygon. The paper barely resolved 1 pixel; use ≥2 pixels (36 µm) for greater robustness.</p>
         </section>
+      </section>
+
+      <section className="print-sheet" aria-label="Experimental run sheet">
+        <header>
+          <div><p>GDS2GOO · EXPERIMENT RECORD</p><h1>UV exposure run sheet</h1></div>
+          <p>Elegoo Mars 4 9K<br />405 nm · 18 µm pixel</p>
+        </header>
+        <dl className="print-parameters">
+          <div><dt>Source</dt><dd>{sourceInfo?.name ?? "—"}</dd></div>
+          <div><dt>GDS SHA-256</dt><dd className="print-hash">{sourceInfo?.sha256 ?? "Not applicable"}</dd></div>
+          <div><dt>Top cell / layers</dt><dd>{model ? topCell : "Generated pattern"} · {selectedLayers.join(", ") || "—"}</dd></div>
+          <div><dt>Exposure</dt><dd>{calibrationMode ? calibrationSeries : settings.exposure} s</dd></div>
+          <div><dt>Placement</dt><dd>{settings.anchor} · X {settings.offsetX} µm · Y {settings.offsetY} µm · {settings.rotation}°</dd></div>
+          <div><dt>Orientation</dt><dd>{settings.mirrorX ? "Mirror X · " : ""}{settings.mirrorY ? "Mirror Y · " : ""}{settings.inverted ? "Exposed background" : "Exposed geometry"}</dd></div>
+          <div><dt>Layout / minimum feature</dt><dd>{bounds ? `${(bounds.width / 1000).toFixed(3)} × ${(bounds.height / 1000).toFixed(3)} mm` : "—"} · {minimumFeature === null ? "—" : `${minimumFeature.toFixed(1)} µm`}</dd></div>
+          <div><dt>Photoresist / thickness</dt><dd>{processMetadata.photoresist || "—"} · {processMetadata.thicknessNm ? `${processMetadata.thicknessNm} nm` : "—"}</dd></div>
+          <div><dt>Soft bake</dt><dd>{processMetadata.softBake || "—"}</dd></div>
+          <div><dt>Development</dt><dd>{processMetadata.development || "—"}</dd></div>
+          <div className="print-wide"><dt>Notes</dt><dd>{processMetadata.notes || "—"}</dd></div>
+        </dl>
+        <div className="print-checklist">
+          <h2>Pre-exposure verification</h2>
+          <p>□ GOO opens in UVtools as 8520 × 4320 px and one layer.</p>
+          <p>□ Orientation, corner markers and polarity match the intended mask.</p>
+          <p>□ Dry LCD exposure completed without substrate or photoresist.</p>
+          <p>□ Resist batch, substrate ID and process conditions recorded.</p>
+        </div>
+        <div className="print-results">
+          <h2>Experimental result</h2>
+          <p>Date: ____________________________________ Operator: ____________________________________</p>
+          <p>Observed linewidth / outcome: __________________________________________________________________________</p>
+          <p>Deviations and next dose: ______________________________________________________________________________</p>
+        </div>
+        <footer>Generated from the current local GDS2GOO state. Attach the companion <code>.run.json</code> to the laboratory record.</footer>
       </section>
 
       <section className="science-strip">

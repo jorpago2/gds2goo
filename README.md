@@ -12,8 +12,12 @@ Local converter from GDSII layouts to single-layer `.goo` exposure files for the
 - Supports layout-centre, GDS-origin and lower-left placement anchors, with clipping validation after all transformations.
 - Includes a native 64 × 64 pixel inspector and a true 8520 × 4320 LCD pixel grid at 8× zoom.
 - Generates a built-in 18–180 µm line/space calibration mask and exposure-time series.
+- Generates an asymmetric LCD diagnostic for orientation, polarity, clipping and a 10.008 mm scale check.
+- Reports exposure-relevant GDS compatibility warnings instead of silently omitting unsupported geometry.
 - Exports GOO V3.0 with RLE and checksum, plus a 9K verification PNG.
 - Exports a companion `.run.json` manifest with the GDS SHA-256, mask settings and optional process metadata.
+- Restores validated `.run.json` recipes and verifies their printer profile and source SHA-256.
+- Packages GOO, PNG and manifest files into a standard ZIP and provides an A4 experimental run sheet.
 - All processing happens in the browser; the GDS file is never uploaded.
 
 ## Run locally
