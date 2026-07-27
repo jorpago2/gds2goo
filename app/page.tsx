@@ -12,9 +12,11 @@ import {
 } from "@/lib/gds.js";
 import { buildGooFile, encodeBinaryLayer, MARS_4_9K, validateGooFile } from "@/lib/goo.js";
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "@/lib/calibration.js";
+import { fitsSubstrateArea, repeatShapes, transformGuideShapes } from "@/lib/experiment.js";
 import { createRunManifest, parseRunManifest } from "@/lib/manifest.js";
 import { createMonochromePreview, mergeBinaryOverlay, rasterizeBinaryMask } from "@/lib/raster.js";
-import { createSubstrateOutlineShape, createWaferOutlinePath } from "@/lib/substrate.js";
+import { parseRecipeLibrary, saveRecipeToLibrary } from "@/lib/recipes.js";
+import { createAlignmentMarkShapes, createSubstrateOutlineShape, createWaferOutlinePath } from "@/lib/substrate.js";
 import { buildZip } from "@/lib/zip.js";
 
 type MaskSettings = {
@@ -42,12 +44,30 @@ const DEFAULT_SETTINGS: MaskSettings = {
 const SUBSTRATE_MASK_SETTINGS = { ...DEFAULT_SETTINGS, anchor: "gds-origin" as const };
 const INSPECTOR_SIZE = 64;
 
-const SUBSTRATE_TEMPLATES = [
+type SubstrateTemplate = {
+  id: string;
+  label: string;
+  shape: "circle" | "rectangle";
+  width: number;
+  height: number;
+  flatLength: number;
+};
+
+type SavedRecipe = {
+  name: string;
+  exposure: number;
+  calibrationSeries: string;
+  process: ProcessMetadata;
+};
+
+const SUBSTRATE_TEMPLATES: SubstrateTemplate[] = [
   { id: "wafer-1", label: "1-inch wafer · Ø25.4 mm", shape: "circle", width: 25.4, height: 25.4, flatLength: 4 },
   { id: "wafer-2", label: "2-inch wafer · Ø50.8 mm", shape: "circle", width: 50.8, height: 50.8, flatLength: 15.88 },
   { id: "wafer-3", label: "3-inch wafer · Ø76.2 mm", shape: "circle", width: 76.2, height: 76.2, flatLength: 22.22 },
-  { id: "slide-75x25", label: "Microscope slide · 75 × 25 mm", shape: "rectangle", width: 75, height: 25 },
-] as const;
+  { id: "slide-75x25", label: "Microscope slide · 75 × 25 mm", shape: "rectangle", width: 75, height: 25, flatLength: 0 },
+  { id: "custom-circle", label: "Custom circular substrate", shape: "circle", width: 50, height: 50, flatLength: 15 },
+  { id: "custom-rectangle", label: "Custom rectangular substrate", shape: "rectangle", width: 50, height: 25, flatLength: 0 },
+];
 
 type ProcessMetadata = {
   photoresist: string;
@@ -220,6 +240,11 @@ async function sha256Hex(buffer: ArrayBuffer) {
   return [...digest].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
+function boundedNumber(value: string, current: number, minimum: number, maximum: number) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(minimum, Math.min(maximum, number)) : current;
+}
+
 export default function Home() {
   const fileInput = useRef<HTMLInputElement>(null);
   const runInput = useRef<HTMLInputElement>(null);
@@ -240,23 +265,70 @@ export default function Home() {
   const [waferMarker, setWaferMarker] = useState<"round" | "flat" | "notch">("round");
   const [includeSubstrateOutline, setIncludeSubstrateOutline] = useState(false);
   const [substrateLineWidth, setSubstrateLineWidth] = useState(180);
+  const [substrateOffsetX, setSubstrateOffsetX] = useState(0);
+  const [substrateOffsetY, setSubstrateOffsetY] = useState(0);
+  const [substrateRotation, setSubstrateRotation] = useState(0);
+  const [edgeExclusion, setEdgeExclusion] = useState(3);
+  const [customWidth, setCustomWidth] = useState(50);
+  const [customHeight, setCustomHeight] = useState(25);
+  const [customFlatLength, setCustomFlatLength] = useState(15);
+  const [alignmentStyle, setAlignmentStyle] = useState<"none" | "crosses" | "corners" | "targets" | "ruler" | "full">("none");
+  const [alignmentSize, setAlignmentSize] = useState(3);
+  const [repeatRows, setRepeatRows] = useState(1);
+  const [repeatColumns, setRepeatColumns] = useState(1);
+  const [repeatPitchX, setRepeatPitchX] = useState(0);
+  const [repeatPitchY, setRepeatPitchY] = useState(0);
+  const [layerExposures, setLayerExposures] = useState<Record<number, number>>({});
+  const [recipes, setRecipes] = useState<SavedRecipe[]>([]);
+  const [recipeName, setRecipeName] = useState("");
+  const [selectedRecipe, setSelectedRecipe] = useState("");
+  const [measureMode, setMeasureMode] = useState(false);
+  const [measurementStart, setMeasurementStart] = useState<{ x: number; y: number } | null>(null);
+  const [measurementEnd, setMeasurementEnd] = useState<{ x: number; y: number } | null>(null);
   const [inspection, setInspection] = useState({ x: Math.floor(MARS_4_9K.width / 2), y: Math.floor(MARS_4_9K.height / 2) });
   const [calibrationMode, setCalibrationMode] = useState(false);
   const [calibrationSeries, setCalibrationSeries] = useState("5, 7, 9, 11, 13");
   const [processMetadata, setProcessMetadata] = useState(DEFAULT_PROCESS);
   const [sourceInfo, setSourceInfo] = useState<SourceInfo | null>(null);
 
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      setRecipes(parseRecipeLibrary(localStorage.getItem("gds2goo-recipes")) as SavedRecipe[]);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
   const layers = useMemo(() => [...new Set(shapes.map((shape) => shape.layer))].sort((a, b) => a - b), [shapes]);
   const visibleShapes = useMemo(
     () => shapes.filter((shape) => selectedLayers.includes(shape.layer)),
     [shapes, selectedLayers],
   );
-  const bounds = useMemo(() => visibleShapes.length ? boundsOf(visibleShapes) : null, [visibleShapes]);
-  const minimumFeature = useMemo(
-    () => visibleShapes.length ? estimateMinimumFeature(visibleShapes) : null,
-    [visibleShapes],
+  const repeatedShapes = useMemo(
+    () => repeatShapes(visibleShapes, {
+      rows: repeatRows,
+      columns: repeatColumns,
+      pitchXMicrometers: repeatPitchX,
+      pitchYMicrometers: repeatPitchY,
+    }),
+    [visibleShapes, repeatRows, repeatColumns, repeatPitchX, repeatPitchY],
   );
-  const substrateTemplate = SUBSTRATE_TEMPLATES.find(({ id }) => id === substrateTemplateId);
+  const bounds = useMemo(() => repeatedShapes.length ? boundsOf(repeatedShapes) : null, [repeatedShapes]);
+  const minimumFeature = useMemo(
+    () => repeatedShapes.length ? estimateMinimumFeature(repeatedShapes) : null,
+    [repeatedShapes],
+  );
+  const substrateTemplate = useMemo(() => {
+    const preset = SUBSTRATE_TEMPLATES.find(({ id }) => id === substrateTemplateId);
+    if (!preset) return undefined;
+    if (preset.id === "custom-circle") {
+      const flatLength = Math.min(customFlatLength, customWidth - 0.1);
+      return { ...preset, label: `Custom circular substrate · Ø${customWidth} mm`, width: customWidth, height: customWidth, flatLength };
+    }
+    if (preset.id === "custom-rectangle") {
+      return { ...preset, label: `Custom rectangular substrate · ${customWidth} × ${customHeight} mm`, width: customWidth, height: customHeight };
+    }
+    return preset;
+  }, [substrateTemplateId, customWidth, customHeight, customFlatLength]);
   const waferOutlinePath = substrateTemplate?.shape === "circle" && waferMarker !== "round"
     ? createWaferOutlinePath({
       centreX: MARS_4_9K.sizeX / 2,
@@ -277,27 +349,73 @@ export default function Home() {
     })] : [],
     [substrateTemplate, waferMarker, substrateLineWidth],
   );
-  const exportedSubstrateShapes = useMemo(
-    () => includeSubstrateOutline ? substrateOutlineShapes : [],
-    [includeSubstrateOutline, substrateOutlineShapes],
+  const alignmentShapes = useMemo(
+    () => substrateTemplate ? createAlignmentMarkShapes({
+      shape: substrateTemplate.shape,
+      widthMillimeters: substrateTemplate.width,
+      heightMillimeters: substrateTemplate.height,
+      style: alignmentStyle,
+      sizeMillimeters: alignmentSize,
+      edgeExclusionMillimeters: edgeExclusion,
+      lineWidthMicrometers: substrateLineWidth,
+    }) : [],
+    [substrateTemplate, alignmentStyle, alignmentSize, edgeExclusion, substrateLineWidth],
   );
-  const outsideScreen = Boolean(visibleShapes.length && !fitsDisplay(
-    visibleShapes,
+  const exportedSubstrateShapes = useMemo(
+    () => transformGuideShapes([
+      ...(includeSubstrateOutline ? substrateOutlineShapes : []),
+      ...alignmentShapes,
+    ], {
+      offsetXMicrometers: substrateOffsetX,
+      offsetYMicrometers: substrateOffsetY,
+      rotationDegrees: substrateRotation,
+    }),
+    [includeSubstrateOutline, substrateOutlineShapes, alignmentShapes, substrateOffsetX, substrateOffsetY, substrateRotation],
+  );
+  const outsideScreen = Boolean(repeatedShapes.length && (!fitsDisplay(
+    repeatedShapes,
     settings,
     MARS_4_9K.sizeX * 1000,
     MARS_4_9K.sizeY * 1000,
+  ) || (exportedSubstrateShapes.length && !fitsDisplay(
+    exportedSubstrateShapes,
+    SUBSTRATE_MASK_SETTINGS,
+    MARS_4_9K.sizeX * 1000,
+    MARS_4_9K.sizeY * 1000,
+  ))));
+  const substrateFitSettings = substrateTemplate ? {
+      shape: substrateTemplate.shape,
+      widthMillimeters: substrateTemplate.width,
+      heightMillimeters: substrateTemplate.height,
+      marker: substrateTemplate.shape === "circle" ? waferMarker : "round",
+      flatLengthMillimeters: substrateTemplate.flatLength,
+      offsetXMicrometers: substrateOffsetX,
+      offsetYMicrometers: substrateOffsetY,
+      rotationDegrees: substrateRotation,
+      edgeExclusionMillimeters: edgeExclusion,
+    } : null;
+  const exportedAlignmentShapes = exportedSubstrateShapes.slice(includeSubstrateOutline ? substrateOutlineShapes.length : 0);
+  const outsideSubstrate = Boolean(substrateFitSettings && repeatedShapes.length && (
+    !fitsSubstrateArea(repeatedShapes, settings, substrateFitSettings)
+    || !fitsSubstrateArea(exportedAlignmentShapes, SUBSTRATE_MASK_SETTINGS, substrateFitSettings)
   ));
+  const measurement = measurementStart && measurementEnd ? {
+    deltaX: (measurementEnd.x - measurementStart.x) * MARS_4_9K.pixelMicrometers / 1000,
+    deltaY: (measurementStart.y - measurementEnd.y) * MARS_4_9K.pixelMicrometers / 1000,
+    distance: Math.hypot(measurementEnd.x - measurementStart.x, measurementEnd.y - measurementStart.y)
+      * MARS_4_9K.pixelMicrometers / 1000,
+  } : null;
 
   useEffect(() => {
-    if (!preview.current || !visibleShapes.length) return;
-    drawMask(preview.current, visibleShapes, settings, 1400, 710, exportedSubstrateShapes);
-  }, [visibleShapes, settings, exportedSubstrateShapes]);
+    if (!preview.current || !repeatedShapes.length) return;
+    drawMask(preview.current, repeatedShapes, settings, 1400, 710, exportedSubstrateShapes);
+  }, [repeatedShapes, settings, exportedSubstrateShapes]);
 
   useEffect(() => {
-    if (!inspector.current || !visibleShapes.length) return;
+    if (!inspector.current || !repeatedShapes.length) return;
     const offsetX = Math.max(0, Math.min(MARS_4_9K.width - INSPECTOR_SIZE, inspection.x - INSPECTOR_SIZE / 2));
     const offsetY = Math.max(0, Math.min(MARS_4_9K.height - INSPECTOR_SIZE, inspection.y - INSPECTOR_SIZE / 2));
-    const pixels = combinedMask(visibleShapes, settings, exportedSubstrateShapes, {
+    const pixels = combinedMask(repeatedShapes, settings, exportedSubstrateShapes, {
       width: INSPECTOR_SIZE,
       height: INSPECTOR_SIZE,
       fullWidth: MARS_4_9K.width,
@@ -310,14 +428,21 @@ export default function Home() {
     context.strokeStyle = "#ff5a1f";
     context.lineWidth = 0.5;
     context.strokeRect(inspection.x - offsetX + 0.25, inspection.y - offsetY + 0.25, 0.5, 0.5);
-  }, [visibleShapes, settings, inspection, exportedSubstrateShapes]);
+  }, [repeatedShapes, settings, inspection, exportedSubstrateShapes]);
 
   function inspectPreview(event: ReactMouseEvent<HTMLDivElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
-    setInspection({
+    const point = {
       x: Math.max(0, Math.min(MARS_4_9K.width - 1, Math.floor((event.clientX - rect.left) / rect.width * MARS_4_9K.width))),
       y: Math.max(0, Math.min(MARS_4_9K.height - 1, Math.floor((event.clientY - rect.top) / rect.height * MARS_4_9K.height))),
-    });
+    };
+    setInspection(point);
+    if (measureMode) {
+      if (!measurementStart || measurementEnd) {
+        setMeasurementStart(point);
+        setMeasurementEnd(null);
+      } else setMeasurementEnd(point);
+    }
   }
 
   function updateShapes(nextModel: ReturnType<typeof parseGds>, cell: string) {
@@ -325,6 +450,7 @@ export default function Home() {
     const nextLayers = [...new Set(flattened.map((shape) => shape.layer))].sort((a, b) => a - b);
     setShapes(flattened);
     setSelectedLayers(nextLayers);
+    setLayerExposures(Object.fromEntries(nextLayers.map((layer) => [layer, settings.exposure])));
     setMessage(`${flattened.length.toLocaleString("en-US")} geometries ready across ${nextLayers.length} layer(s).`);
   }
 
@@ -370,6 +496,7 @@ export default function Home() {
     setTopCell("");
     setShapes(generatedShapes);
     setSelectedLayers(generatedLayers);
+    setLayerExposures(Object.fromEntries(generatedLayers.map((layer) => [layer, settings.exposure])));
     setSettings({ ...DEFAULT_SETTINGS, exposure: settings.exposure });
     setMessage(readyMessage);
   }
@@ -438,6 +565,24 @@ export default function Home() {
       setWaferMarker(restored.substrateOutline?.marker ?? "round");
       setIncludeSubstrateOutline(restored.substrateOutline?.included ?? false);
       setSubstrateLineWidth(restored.substrateOutline?.lineWidthMicrometers ?? 180);
+      if (restored.substrateOutline) {
+        setCustomWidth(restored.substrateOutline.widthMillimeters);
+        setCustomHeight(restored.substrateOutline.heightMillimeters);
+        setCustomFlatLength(restored.substrateOutline.flatLengthMillimeters || 15);
+        setSubstrateOffsetX(restored.substrateOutline.offsetXMicrometers);
+        setSubstrateOffsetY(restored.substrateOutline.offsetYMicrometers);
+        setSubstrateRotation(restored.substrateOutline.rotationDegrees);
+        setEdgeExclusion(restored.substrateOutline.edgeExclusionMillimeters);
+        setAlignmentStyle(restored.substrateOutline.alignmentStyle as typeof alignmentStyle);
+        setAlignmentSize(restored.substrateOutline.alignmentSizeMillimeters);
+      }
+      setRepeatRows(restored.stepAndRepeat.rows);
+      setRepeatColumns(restored.stepAndRepeat.columns);
+      setRepeatPitchX(restored.stepAndRepeat.pitchXMicrometers);
+      setRepeatPitchY(restored.stepAndRepeat.pitchYMicrometers);
+      setLayerExposures(Object.keys(restored.layerExposures).length
+        ? restored.layerExposures
+        : Object.fromEntries(restoredLayers.map((layer) => [layer, restored.settings.exposure])));
       if (restored.exposures.length > 1) setCalibrationSeries(restored.exposures.join(", "));
       setMessage(`Run restored from ${file.name}. Verify the preview before export.`);
     } catch (error) {
@@ -463,6 +608,44 @@ export default function Home() {
       : [...current, layer].sort((a, b) => a - b));
   }
 
+  function persistRecipes(nextRecipes: SavedRecipe[]) {
+    localStorage.setItem("gds2goo-recipes", JSON.stringify(nextRecipes));
+    setRecipes(nextRecipes);
+  }
+
+  function saveRecipe() {
+    try {
+      const nextRecipes = saveRecipeToLibrary(recipes, {
+        name: recipeName.trim(),
+        exposure: settings.exposure,
+        calibrationSeries,
+        process: processMetadata,
+      }) as SavedRecipe[];
+      persistRecipes(nextRecipes);
+      setSelectedRecipe(nextRecipes[0].name);
+      setRecipeName("");
+      setMessage(`Process recipe “${nextRecipes[0].name}” saved locally.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The process recipe could not be saved.");
+    }
+  }
+
+  function loadRecipe() {
+    const recipe = recipes.find(({ name }) => name === selectedRecipe);
+    if (!recipe) return;
+    setSettings({ ...settings, exposure: recipe.exposure });
+    setCalibrationSeries(recipe.calibrationSeries);
+    setProcessMetadata(recipe.process);
+    setMessage(`Process recipe “${recipe.name}” loaded.`);
+  }
+
+  function deleteRecipe() {
+    if (!selectedRecipe) return;
+    persistRecipes(recipes.filter(({ name }) => name !== selectedRecipe));
+    setSelectedRecipe("");
+    setMessage("Process recipe deleted from this browser.");
+  }
+
   function outputBaseName() {
     return fileName.replace(/\.gds(ii)?$/i, "") || "mask";
   }
@@ -477,7 +660,7 @@ export default function Home() {
       mask: {
         topCell: model ? topCell : null,
         selectedLayers,
-        geometryCount: visibleShapes.length,
+        geometryCount: repeatedShapes.length,
         boundsMicrometers: bounds,
         estimatedMinimumFeatureMicrometers: minimumFeature,
         polarity: settings.inverted ? "exposed-background" : "exposed-geometry",
@@ -494,7 +677,23 @@ export default function Home() {
           marker: substrateTemplate.shape === "circle" ? waferMarker : "round",
           included: includeSubstrateOutline,
           lineWidthMicrometers: substrateLineWidth,
+          widthMillimeters: substrateTemplate.width,
+          heightMillimeters: substrateTemplate.height,
+          flatLengthMillimeters: substrateTemplate.flatLength,
+          offsetXMicrometers: substrateOffsetX,
+          offsetYMicrometers: substrateOffsetY,
+          rotationDegrees: substrateRotation,
+          edgeExclusionMillimeters: edgeExclusion,
+          alignmentStyle,
+          alignmentSizeMillimeters: alignmentSize,
         } : null,
+        stepAndRepeat: {
+          rows: repeatRows,
+          columns: repeatColumns,
+          pitchXMicrometers: repeatPitchX,
+          pitchYMicrometers: repeatPitchY,
+        },
+        layerExposuresSeconds: Object.fromEntries(selectedLayers.map((layer) => [layer, layerExposures[layer] ?? settings.exposure])),
       },
     });
   }
@@ -516,7 +715,7 @@ export default function Home() {
     setMessage("Rasterizing 36.8 million pixels locally…");
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     try {
-      const raster = rasterizeMask(visibleShapes, settings, exportedSubstrateShapes);
+      const raster = rasterizeMask(repeatedShapes, settings, exportedSubstrateShapes);
       const { goo, check } = buildValidatedGoo(raster, settings.exposure);
       const baseName = outputBaseName();
       const gooName = `${baseName}.goo`;
@@ -537,7 +736,7 @@ export default function Home() {
       setBusy(true);
       setMessage(`Rasterizing calibration series for ${exposures.length} exposure(s)…`);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      const raster = rasterizeMask(visibleShapes, settings, exportedSubstrateShapes);
+      const raster = rasterizeMask(repeatedShapes, settings, exportedSubstrateShapes);
       const outputNames: string[] = [];
       const entries: Array<{ name: string; data: Uint8Array | string }> = [];
       for (const exposure of exposures) {
@@ -560,13 +759,51 @@ export default function Home() {
     }
   }
 
+  async function exportLayerFiles() {
+    if (selectedLayers.length < 2 || outsideScreen) return;
+    setBusy(true);
+    setMessage(`Generating ${selectedLayers.length} independent layer exposure(s)…`);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    try {
+      const entries: Array<{ name: string; data: Uint8Array | string }> = [];
+      const outputs: string[] = [];
+      const exposures: number[] = [];
+      for (let index = 0; index < selectedLayers.length; index += 1) {
+        const layer = selectedLayers[index];
+        const exposure = Number(layerExposures[layer] ?? settings.exposure);
+        if (!(exposure >= 0.1 && exposure <= 600)) throw new Error(`Layer ${layer} exposure must be between 0.1 and 600 s.`);
+        const layerShapes = repeatShapes(shapes.filter((shape) => shape.layer === layer), {
+          rows: repeatRows,
+          columns: repeatColumns,
+          pitchXMicrometers: repeatPitchX,
+          pitchYMicrometers: repeatPitchY,
+        });
+        const raster = rasterizeMask(layerShapes, settings, index === 0 ? exportedSubstrateShapes : []);
+        const { goo } = buildValidatedGoo(raster, exposure);
+        const exposureLabel = String(exposure).replace(".", "p");
+        const name = `${outputBaseName()}-L${layer}-${exposureLabel}s.goo`;
+        entries.push({ name, data: goo });
+        outputs.push(name);
+        exposures.push(exposure);
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      }
+      entries.push({ name: `${outputBaseName()}-layers.run.json`, data: JSON.stringify(buildManifest(exposures, outputs), null, 2) });
+      saveFile(buildZip(entries), `${outputBaseName()}-layer-exposures.zip`, "application/zip");
+      setMessage(`${selectedLayers.length} layer-specific GOO files validated and packaged.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The layer exposure package could not be generated.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function exportBundle() {
     if (!visibleShapes.length || outsideScreen) return;
     setBusy(true);
     setMessage("Building reproducible experiment package…");
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     try {
-      const raster = rasterizeMask(visibleShapes, settings, exportedSubstrateShapes);
+      const raster = rasterizeMask(repeatedShapes, settings, exportedSubstrateShapes);
       const baseName = outputBaseName();
       const gooName = `${baseName}.goo`;
       const pngName = `${baseName}-8520x4320.png`;
@@ -594,7 +831,7 @@ export default function Home() {
     setMessage("Generating 9K verification PNG…");
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     try {
-      const png = await encodePng(nativeMask(visibleShapes, settings, exportedSubstrateShapes));
+      const png = await encodePng(nativeMask(repeatedShapes, settings, exportedSubstrateShapes));
       saveFile(png, `${fileName.replace(/\.gds(ii)?$/i, "") || "mask"}-8520x4320.png`, "image/png");
       setMessage("9K PNG generated. Use it to verify orientation and polarity.");
     } catch (error) {
@@ -632,9 +869,9 @@ export default function Home() {
           <ol>
             <li><span>01</span><div><strong>Prepare the layout</strong><p>Confirm the GDS physical units and prefer features of at least 36 µm for a robust first test.</p></div></li>
             <li><span>02</span><div><strong>Load and select</strong><p>Drop the GDS, choose its top cell and enable only the layers that must be exposed.</p></div></li>
-            <li><span>03</span><div><strong>Place the mask</strong><p>Set the anchor, rotation, mirrors and offsets. Export remains disabled if geometry is clipped.</p></div></li>
+            <li><span>03</span><div><strong>Place and array</strong><p>Set mask and substrate placement, edge exclusion and step-and-repeat. Display clipping blocks export.</p></div></li>
             <li><span>04</span><div><strong>Calibrate the dose</strong><p>Use the built-in pattern and an exposure series for each resist, thickness, bake and development process.</p></div></li>
-            <li><span>05</span><div><strong>Inspect and record</strong><p>Check polarity and native pixels, then download the experiment ZIP and print the run sheet.</p></div></li>
+            <li><span>05</span><div><strong>Inspect and record</strong><p>Measure, check polarity and native pixels, then download the experiment ZIP and print the run sheet.</p></div></li>
           </ol>
           <p className="guide-safety"><strong>First run:</strong> verify the GOO in UVtools and perform a dry exposure without photoresist. The default 9 s is a starting point, not a universal dose.</p>
           <a href="#converter">Open the converter <span aria-hidden="true">↓</span></a>
@@ -699,6 +936,32 @@ export default function Home() {
                   ))}
                 </div>
               </fieldset>
+              {selectedLayers.length > 1 && (
+                <details className="process-metadata layer-exposures">
+                  <summary>Per-layer exposures</summary>
+                  <div className="layer-exposure-grid">
+                    {selectedLayers.map((layer) => (
+                      <label key={layer}>L{layer} <span>s</span>
+                        <input
+                          type="number"
+                          min="0.1"
+                          max="600"
+                          step="0.1"
+                          value={layerExposures[layer] ?? settings.exposure}
+                          onChange={(event) => setLayerExposures({
+                            ...layerExposures,
+                            [layer]: boundedNumber(event.target.value, layerExposures[layer] ?? settings.exposure, 0.1, 600),
+                          })}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <button type="button" disabled={busy || outsideScreen} onClick={() => void exportLayerFiles()}>
+                    Download layer exposure ZIP
+                  </button>
+                  <p>One GOO per layer. Substrate outline and alignment marks are included only in the first file to avoid repeated dose.</p>
+                </details>
+              )}
               {sourceInfo?.kind === "generated-diagnostic" && (
                 <div className="diagnostic-note">
                   <strong>How to read it</strong>
@@ -737,6 +1000,28 @@ export default function Home() {
             </label>
           </div>
           <p className="placement-note">Anchor coordinates are measured from the LCD centre.</p>
+          <details className="process-metadata repeat-settings">
+            <summary>Step-and-repeat</summary>
+            <div className="process-grid">
+              <label>Rows <span>1–10</span>
+                <input type="number" min="1" max="10" step="1" value={repeatRows}
+                  onChange={(event) => setRepeatRows(Math.round(boundedNumber(event.target.value, repeatRows, 1, 10)))} />
+              </label>
+              <label>Columns <span>1–10</span>
+                <input type="number" min="1" max="10" step="1" value={repeatColumns}
+                  onChange={(event) => setRepeatColumns(Math.round(boundedNumber(event.target.value, repeatColumns, 1, 10)))} />
+              </label>
+              <label>Pitch X <span>µm</span>
+                <input type="number" min="0" step="18" value={repeatPitchX}
+                  onChange={(event) => setRepeatPitchX(boundedNumber(event.target.value, repeatPitchX, 0, 153360))} />
+              </label>
+              <label>Pitch Y <span>µm</span>
+                <input type="number" min="0" step="18" value={repeatPitchY}
+                  onChange={(event) => setRepeatPitchY(boundedNumber(event.target.value, repeatPitchY, 0, 77760))} />
+              </label>
+            </div>
+            <p>{repeatRows * repeatColumns} copies · pitch is centre-to-centre. Maximum 100 copies.</p>
+          </details>
           {calibrationMode && (
             <div className="calibration-series">
               <label>Exposure series <span>s · comma-separated</span>
@@ -757,6 +1042,30 @@ export default function Home() {
             <span className="switch" />
             Invert polarity <small>{settings.inverted ? "exposed background" : "exposed geometry"}</small>
           </label>
+
+          <details className="process-metadata recipe-library">
+            <summary>Local process recipes</summary>
+            <label>Recipe name
+              <input type="text" maxLength={50} value={recipeName} placeholder="e.g. AZ1505 · 600 nm"
+                onChange={(event) => setRecipeName(event.target.value)} />
+            </label>
+            <button type="button" disabled={!recipeName.trim()} onClick={saveRecipe}>Save current process</button>
+            {recipes.length > 0 && (
+              <>
+                <label>Saved recipes
+                  <select value={selectedRecipe} onChange={(event) => setSelectedRecipe(event.target.value)}>
+                    <option value="">Select a recipe</option>
+                    {recipes.map((recipe) => <option key={recipe.name} value={recipe.name}>{recipe.name}</option>)}
+                  </select>
+                </label>
+                <div className="recipe-actions">
+                  <button type="button" disabled={!selectedRecipe} onClick={loadRecipe}>Load</button>
+                  <button type="button" disabled={!selectedRecipe} onClick={deleteRecipe}>Delete</button>
+                </div>
+              </>
+            )}
+            <p>Stored only in this browser. Recipes contain exposure and process metadata, not GDS geometry.</p>
+          </details>
 
           <details className="process-metadata">
             <summary>Process metadata</summary>
@@ -785,9 +1094,13 @@ export default function Home() {
             <p>Saved locally in the companion <code>.run.json</code> file.</p>
           </details>
 
-          <div className={`status ${outsideScreen ? "error" : ""}`} role="status">
-            <span>{outsideScreen ? "!" : busy ? "…" : "✓"}</span>
-            <p>{outsideScreen ? "The mask exceeds the physical display area." : message}</p>
+          <div className={`status ${outsideScreen ? "error" : outsideSubstrate ? "warning" : ""}`} role="status">
+            <span>{outsideScreen || outsideSubstrate ? "!" : busy ? "…" : "✓"}</span>
+            <p>{outsideScreen
+              ? "The mask exceeds the physical display area."
+              : outsideSubstrate
+                ? "The layout crosses the configured substrate usable area. Export remains available."
+                : message}</p>
           </div>
           <button className="primary-action" type="button" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportGoo()}>
             {busy ? "Processing…" : "Generate .GOO file"}<span>→</span>
@@ -842,9 +1155,29 @@ export default function Home() {
                   ))}
                 </select>
               </label>
-              {substrateTemplate?.shape === "circle" && (
-                <label className="template-control" title="SEMI nominal flat for 2/3-inch wafers; the 1-inch flat is a 4 mm guide. The 1 mm, 90° notch is a reference geometry and is not standard for these wafer diameters.">
-                  <span>EDGE MARKER</span>
+              <label className="grid-control" title="Measure between two clicks on the LCD preview">
+                <input type="checkbox" checked={measureMode} disabled={!repeatedShapes.length}
+                  onChange={(event) => { setMeasureMode(event.target.checked); setMeasurementStart(null); setMeasurementEnd(null); }} />
+                <span>MEASURE</span>
+              </label>
+            </div>
+          </div>
+          {substrateTemplate && (
+            <div className="substrate-controls" aria-label="Substrate configuration">
+              {substrateTemplateId.startsWith("custom-") && (
+                <>
+                  <label>{substrateTemplate.shape === "circle" ? "Diameter" : "Width"} <span>mm</span>
+                    <input type="number" min="1" max={substrateTemplate.shape === "circle" ? 77.76 : 153.36} step="0.1" value={customWidth}
+                      onChange={(event) => setCustomWidth(boundedNumber(event.target.value, customWidth, 1, substrateTemplate.shape === "circle" ? 77.76 : 153.36))} />
+                  </label>
+                  {substrateTemplate.shape === "rectangle" && <label>Height <span>mm</span>
+                    <input type="number" min="1" max="77.76" step="0.1" value={customHeight}
+                      onChange={(event) => setCustomHeight(boundedNumber(event.target.value, customHeight, 1, 77.76))} />
+                  </label>}
+                </>
+              )}
+              {substrateTemplate.shape === "circle" && (
+                <label title="SEMI nominal flat for 2/3-inch wafers; the 1-inch flat is a 4 mm guide.">Edge marker
                   <select value={waferMarker} onChange={(event) => setWaferMarker(event.target.value as typeof waferMarker)}>
                     <option value="round">None</option>
                     <option value="flat">Primary flat</option>
@@ -852,36 +1185,46 @@ export default function Home() {
                   </select>
                 </label>
               )}
-              {substrateTemplate && (
-                <>
-                  <label className="grid-control" title="Rasterize the selected outline into GOO, PNG and experiment ZIP outputs">
-                    <input
-                      type="checkbox"
-                      checked={includeSubstrateOutline}
-                      onChange={(event) => setIncludeSubstrateOutline(event.target.checked)}
-                    />
-                    <span>INCLUDE IN MASK</span>
-                  </label>
-                  <label className="template-control outline-width-control">
-                    <span>LINE WIDTH</span>
-                    <input
-                      type="number"
-                      min="36"
-                      max="1000"
-                      step="18"
-                      value={substrateLineWidth}
-                      disabled={!includeSubstrateOutline}
-                      onChange={(event) => {
-                        const value = Number(event.target.value);
-                        if (value >= 36 && value <= 1000) setSubstrateLineWidth(value);
-                      }}
-                    />
-                    <small>µm</small>
-                  </label>
-                </>
-              )}
+              {substrateTemplateId === "custom-circle" && waferMarker === "flat" && <label>Flat length <span>mm</span>
+                <input type="number" min="1" max={customWidth - 0.1} step="0.1" value={customFlatLength}
+                  onChange={(event) => setCustomFlatLength(boundedNumber(event.target.value, customFlatLength, 1, customWidth - 0.1))} />
+              </label>}
+              <label>Substrate X <span>µm</span>
+                <input type="number" step="18" value={substrateOffsetX} onChange={(event) => setSubstrateOffsetX(boundedNumber(event.target.value, substrateOffsetX, -153360, 153360))} />
+              </label>
+              <label>Substrate Y <span>µm</span>
+                <input type="number" step="18" value={substrateOffsetY} onChange={(event) => setSubstrateOffsetY(boundedNumber(event.target.value, substrateOffsetY, -77760, 77760))} />
+              </label>
+              <label>Substrate rotation <span>°</span>
+                <input type="number" min="-180" max="180" step="1" value={substrateRotation}
+                  onChange={(event) => setSubstrateRotation(boundedNumber(event.target.value, substrateRotation, -180, 180))} />
+              </label>
+              <label>Edge exclusion <span>mm</span>
+                <input type="number" min="0" max="20" step="0.1" value={edgeExclusion}
+                  onChange={(event) => setEdgeExclusion(boundedNumber(event.target.value, edgeExclusion, 0, 20))} />
+              </label>
+              <label>Alignment marks
+                <select value={alignmentStyle} onChange={(event) => setAlignmentStyle(event.target.value as typeof alignmentStyle)}>
+                  <option value="none">None</option><option value="crosses">Crosses</option><option value="corners">Corner brackets</option>
+                  <option value="targets">Targets</option><option value="ruler">10 mm ruler</option><option value="full">Full set</option>
+                </select>
+              </label>
+              <label>Mark size <span>mm</span>
+                <input type="number" min="1" max="10" step="0.5" value={alignmentSize} disabled={alignmentStyle === "none"}
+                  onChange={(event) => setAlignmentSize(boundedNumber(event.target.value, alignmentSize, 1, 10))} />
+              </label>
+              <label className="inline-check" title="Rasterize the selected outline into GOO, PNG and ZIP outputs">
+                <input type="checkbox" checked={includeSubstrateOutline} onChange={(event) => setIncludeSubstrateOutline(event.target.checked)} />
+                Include outline in mask
+              </label>
+              <label>Guide line width <span>µm</span>
+                <input type="number" min="36" max="1000" step="18" value={substrateLineWidth}
+                  disabled={!includeSubstrateOutline && alignmentStyle === "none"}
+                  onChange={(event) => { const value = Number(event.target.value); if (value >= 36 && value <= 1000) setSubstrateLineWidth(value); }} />
+              </label>
+              <p className="substrate-note">Alignment marks are exported when selected. The dashed inner guide is the usable area and is never exported.</p>
             </div>
-          </div>
+          )}
           <div className="lcd-shell">
             <div className="lcd-grid">
               {visibleShapes.length ? (
@@ -894,30 +1237,67 @@ export default function Home() {
                   {substrateTemplate && (
                     <div className="substrate-template" aria-hidden="true">
                       <svg viewBox={`0 0 ${MARS_4_9K.sizeX} ${MARS_4_9K.sizeY}`} preserveAspectRatio="none">
-                        {substrateTemplate.shape === "circle" && waferMarker === "round" ? (
-                          <circle
-                            cx={MARS_4_9K.sizeX / 2}
-                            cy={MARS_4_9K.sizeY / 2}
-                            r={substrateTemplate.width / 2}
-                          />
-                        ) : substrateTemplate.shape === "rectangle" ? (
-                          <rect
-                            x={(MARS_4_9K.sizeX - substrateTemplate.width) / 2}
-                            y={(MARS_4_9K.sizeY - substrateTemplate.height) / 2}
-                            width={substrateTemplate.width}
-                            height={substrateTemplate.height}
-                            rx="0.5"
-                          />
-                        ) : <path className="wafer-outline" d={waferOutlinePath ?? undefined} />}
-                        {!includeSubstrateOutline && <path className="centre-mark" d={`M ${MARS_4_9K.sizeX / 2 - 2} ${MARS_4_9K.sizeY / 2} h 4 M ${MARS_4_9K.sizeX / 2} ${MARS_4_9K.sizeY / 2 - 2} v 4`} />}
+                        <g transform={`translate(${substrateOffsetX / 1000} ${-substrateOffsetY / 1000}) rotate(${-substrateRotation} ${MARS_4_9K.sizeX / 2} ${MARS_4_9K.sizeY / 2})`}>
+                          {substrateTemplate.shape === "circle" && waferMarker === "round" ? (
+                            <circle
+                              cx={MARS_4_9K.sizeX / 2}
+                              cy={MARS_4_9K.sizeY / 2}
+                              r={substrateTemplate.width / 2}
+                            />
+                          ) : substrateTemplate.shape === "rectangle" ? (
+                            <rect
+                              x={(MARS_4_9K.sizeX - substrateTemplate.width) / 2}
+                              y={(MARS_4_9K.sizeY - substrateTemplate.height) / 2}
+                              width={substrateTemplate.width}
+                              height={substrateTemplate.height}
+                              rx="0.5"
+                            />
+                          ) : <path className="wafer-outline" d={waferOutlinePath ?? undefined} />}
+                          {edgeExclusion > 0 && (substrateTemplate.shape === "circle" ? (
+                            <circle
+                              className="usable-area"
+                              cx={MARS_4_9K.sizeX / 2}
+                              cy={MARS_4_9K.sizeY / 2}
+                              r={Math.max(0, substrateTemplate.width / 2 - edgeExclusion)}
+                            />
+                          ) : (
+                            <rect
+                              className="usable-area"
+                              x={(MARS_4_9K.sizeX - substrateTemplate.width) / 2 + edgeExclusion}
+                              y={(MARS_4_9K.sizeY - substrateTemplate.height) / 2 + edgeExclusion}
+                              width={Math.max(0, substrateTemplate.width - 2 * edgeExclusion)}
+                              height={Math.max(0, substrateTemplate.height - 2 * edgeExclusion)}
+                            />
+                          ))}
+                          {alignmentShapes.map((shape, index) => (
+                            <polyline
+                              key={index}
+                              className="alignment-mark"
+                              points={shape.points.map((point: { x: number; y: number }) => `${MARS_4_9K.sizeX / 2 + point.x / 1000},${MARS_4_9K.sizeY / 2 - point.y / 1000}`).join(" ")}
+                            />
+                          ))}
+                          {!includeSubstrateOutline && <path className="centre-mark" d={`M ${MARS_4_9K.sizeX / 2 - 2} ${MARS_4_9K.sizeY / 2} h 4 M ${MARS_4_9K.sizeX / 2} ${MARS_4_9K.sizeY / 2 - 2} v 4`} />}
+                        </g>
                       </svg>
-                      <span style={{ top: `${(MARS_4_9K.sizeY - substrateTemplate.height) / 2 / MARS_4_9K.sizeY * 100}%` }}>
+                      <span>
                         {substrateTemplate.label}
                         {waferMarker === "flat" && substrateTemplate.shape === "circle" ? ` · FLAT ${substrateTemplate.flatLength} mm` : ""}
                         {waferMarker === "notch" && substrateTemplate.shape === "circle" ? " · NOTCH 1 mm / 90°" : ""}
                         {includeSubstrateOutline ? ` · INCLUDED ${substrateLineWidth} µm` : " · PREVIEW ONLY"}
                       </span>
                     </div>
+                  )}
+                  {measurementStart && (
+                    <svg className="measurement-overlay" viewBox={`0 0 ${MARS_4_9K.width} ${MARS_4_9K.height}`} preserveAspectRatio="none" aria-hidden="true">
+                      <line
+                        x1={measurementStart.x}
+                        y1={measurementStart.y}
+                        x2={(measurementEnd ?? measurementStart).x}
+                        y2={(measurementEnd ?? measurementStart).y}
+                      />
+                      <circle cx={measurementStart.x} cy={measurementStart.y} r="18" />
+                      {measurementEnd && <circle cx={measurementEnd.x} cy={measurementEnd.y} r="18" />}
+                    </svg>
                   )}
                   {showPreviewGrid && <span className="preview-pixel-grid" aria-hidden="true" />}
                 </div>
@@ -930,6 +1310,11 @@ export default function Home() {
               )}
             </div>
             <div className="screen-axis"><span>0, 0</span><span>X · 153.36 mm</span></div>
+            {measureMode && (
+              <p className="measurement-readout">{measurement
+                ? `MEASURE · ΔX ${measurement.deltaX.toFixed(3)} mm · ΔY ${measurement.deltaY.toFixed(3)} mm · DISTANCE ${measurement.distance.toFixed(3)} mm`
+                : measurementStart ? "MEASURE · Select the second point." : "MEASURE · Select the first point."}</p>
+            )}
           </div>
           {visibleShapes.length > 0 && (
             <div className="pixel-inspector">
@@ -967,7 +1352,10 @@ export default function Home() {
           <div><dt>Placement</dt><dd>{settings.anchor} · X {settings.offsetX} µm · Y {settings.offsetY} µm · {settings.rotation}°</dd></div>
           <div><dt>Orientation</dt><dd>{settings.mirrorX ? "Mirror X · " : ""}{settings.mirrorY ? "Mirror Y · " : ""}{settings.inverted ? "Exposed background" : "Exposed geometry"}</dd></div>
           <div><dt>Layout / minimum feature</dt><dd>{bounds ? `${(bounds.width / 1000).toFixed(3)} × ${(bounds.height / 1000).toFixed(3)} mm` : "—"} · {minimumFeature === null ? "—" : `${minimumFeature.toFixed(1)} µm`}</dd></div>
-          <div><dt>Substrate outline</dt><dd>{substrateTemplate ? `${substrateTemplate.label} · ${includeSubstrateOutline ? `included at ${substrateLineWidth} µm` : "preview only"}` : "—"}</dd></div>
+          <div><dt>Step-and-repeat</dt><dd>{repeatRows} × {repeatColumns} · pitch X {repeatPitchX} µm · Y {repeatPitchY} µm</dd></div>
+          <div><dt>Substrate</dt><dd>{substrateTemplate ? `${substrateTemplate.label} · X ${substrateOffsetX} µm · Y ${substrateOffsetY} µm · ${substrateRotation}° · edge ${edgeExclusion} mm` : "—"}</dd></div>
+          <div><dt>Exported guides</dt><dd>{substrateTemplate ? `${includeSubstrateOutline ? `outline ${substrateLineWidth} µm` : "no outline"} · ${alignmentStyle === "none" ? "no alignment marks" : `${alignmentStyle} marks`}` : "—"}</dd></div>
+          <div><dt>Layer exposures</dt><dd>{selectedLayers.map((layer) => `L${layer}: ${layerExposures[layer] ?? settings.exposure} s`).join(" · ") || "—"}</dd></div>
           <div><dt>Photoresist / thickness</dt><dd>{processMetadata.photoresist || "—"} · {processMetadata.thicknessNm ? `${processMetadata.thicknessNm} nm` : "—"}</dd></div>
           <div><dt>Soft bake</dt><dd>{processMetadata.softBake || "—"}</dd></div>
           <div><dt>Development</dt><dd>{processMetadata.development || "—"}</dd></div>
