@@ -114,6 +114,7 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [previewZoom, setPreviewZoom] = useState(1);
+  const [showPreviewGrid, setShowPreviewGrid] = useState(false);
 
   const layers = useMemo(() => [...new Set(shapes.map((shape) => shape.layer))].sort((a, b) => a - b), [shapes]);
   const visibleShapes = useMemo(
@@ -375,16 +376,27 @@ export default function Home() {
                 />
                 <output>{previewZoom.toFixed(1)}×</output>
               </label>
+              <label className="grid-control" title="Grid of the 1400 × 710 preview samples">
+                <input
+                  type="checkbox"
+                  checked={showPreviewGrid}
+                  disabled={!visibleShapes.length}
+                  onChange={(event) => setShowPreviewGrid(event.target.checked)}
+                />
+                <span>PIXEL GRID</span>
+              </label>
             </div>
           </div>
           <div className="lcd-shell">
             <div className="lcd-grid">
               {visibleShapes.length ? (
-                <canvas
-                  ref={preview}
-                  aria-label="LCD mask preview"
+                <div
+                  className="preview-surface"
                   style={{ width: `${previewZoom * 100}%`, height: `${previewZoom * 100}%` }}
-                />
+                >
+                  <canvas ref={preview} aria-label="LCD mask preview" />
+                  {showPreviewGrid && <span className="preview-pixel-grid" aria-hidden="true" />}
+                </div>
               ) : (
                 <div className="empty-preview">
                   <div className="empty-pattern"><i /><i /><i /><i /><i /></div>
