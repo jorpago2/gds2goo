@@ -8,7 +8,7 @@ Local converter from GDSII layouts to single-layer `.goo` exposure files for the
 
 - Reads `BOUNDARY`, `BOX`, `PATH`, `SREF` and `AREF`, including magnification, rotation and reflection.
 - Preserves the physical GDS units and rasterizes to 8520 × 4320 pixels at 18 µm/pixel using a deterministic pixel-centre rule.
-- Supports layer selection, preview zoom and grid, centred substrate outlines with wafer flats/notches, translation, rotation, mirroring and mask inversion.
+- Supports layer selection, preview zoom and grid, centred substrate outlines with wafer flats/notches, optional outline rasterization, translation, rotation, mirroring and mask inversion.
 - Supports layout-centre, GDS-origin and lower-left placement anchors, with clipping validation after all transformations.
 - Includes a native 64 × 64 pixel inspector and a true 8520 × 4320 LCD pixel grid at 8× zoom.
 - Generates a built-in 18–180 µm line/space calibration mask and exposure-time series.
@@ -35,6 +35,8 @@ Every change to `main` is published automatically to GitHub Pages through GitHub
 ## Assumptions and experimental safety
 
 The 2-inch and 3-inch primary-flat guides use the nominal SEMI M1 lengths of 15.88 mm and 22.22 mm. The 1-inch flat is a non-standard 4 mm placement guide. The optional 1 mm-deep, 90° notch follows SEMI geometry but is only a visual reference here: SEMI specifies that notch for 200 mm and 300 mm silicon wafers, not for these smaller formats.
+
+Substrate outlines are preview-only by default. Enabling `Include in mask` rasterizes the outline into GOO and PNG outputs at a configurable width of 36–1000 µm; the selected template, marker, inclusion state and line width are stored in the run manifest.
 
 The profile is fixed to the Mars 4 9K (153.36 × 77.76 mm, 18 µm/pixel), one 0.05 mm layer and 9 s as an initial value. The 9 s value comes from Wu et al., *Small Methods* 9 (2025), e01336, for LOR2A/AZ1505 and does not replace a process-specific dose matrix. Always verify the PNG, polarity and on-screen orientation without a sample before exposing photoresist.
 

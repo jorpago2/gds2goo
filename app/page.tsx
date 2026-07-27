@@ -13,8 +13,8 @@ import {
 import { buildGooFile, encodeBinaryLayer, MARS_4_9K, validateGooFile } from "@/lib/goo.js";
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "@/lib/calibration.js";
 import { createRunManifest, parseRunManifest } from "@/lib/manifest.js";
-import { createMonochromePreview, rasterizeBinaryMask } from "@/lib/raster.js";
-import { createWaferOutlinePath } from "@/lib/substrate.js";
+import { createMonochromePreview, mergeBinaryOverlay, rasterizeBinaryMask } from "@/lib/raster.js";
+import { createSubstrateOutlineShape, createWaferOutlinePath } from "@/lib/substrate.js";
 import { buildZip } from "@/lib/zip.js";
 
 type MaskSettings = {
@@ -39,6 +39,7 @@ const DEFAULT_SETTINGS: MaskSettings = {
   inverted: false,
 };
 
+const SUBSTRATE_MASK_SETTINGS = { ...DEFAULT_SETTINGS, anchor: "gds-origin" as const };
 const INSPECTOR_SIZE = 64;
 
 const SUBSTRATE_TEMPLATES = [
@@ -77,6 +78,7 @@ function drawMask(
   settings: MaskSettings,
   width: number,
   height: number,
+  substrateShapes: ReturnType<typeof flattenGds> = [],
 ) {
   canvas.width = width;
   canvas.height = height;
@@ -98,36 +100,68 @@ function drawMask(
   context.strokeStyle = context.fillStyle;
   context.lineJoin = "miter";
 
-  for (const shape of shapes) {
-    const first = map(shape.points[0]);
-    context.beginPath();
-    context.moveTo(first.x, first.y);
-    for (let i = 1; i < shape.points.length; i += 1) {
-      const point = map(shape.points[i]);
-      context.lineTo(point.x, point.y);
+  const paintShapes = (
+    shapesToPaint: ReturnType<typeof flattenGds>,
+    pointMap: (point: { x: number; y: number }) => { x: number; y: number },
+  ) => {
+    for (const shape of shapesToPaint) {
+      const first = pointMap(shape.points[0]);
+      context.beginPath();
+      context.moveTo(first.x, first.y);
+      for (let i = 1; i < shape.points.length; i += 1) {
+        const point = pointMap(shape.points[i]);
+        context.lineTo(point.x, point.y);
+      }
+      if (shape.kind === "polygon") {
+        context.closePath();
+        context.fill("evenodd");
+      } else {
+        context.lineWidth = Math.max(1, shape.width * pixelsPerMicrometer);
+        context.lineCap = shape.pathType === 1 ? "round" : shape.pathType === 2 ? "square" : "butt";
+        context.stroke();
+      }
     }
-    if (shape.kind === "polygon") {
-      context.closePath();
-      context.fill("evenodd");
-    } else {
-      context.lineWidth = Math.max(1, shape.width * pixelsPerMicrometer);
-      context.lineCap = shape.pathType === 1 ? "round" : shape.pathType === 2 ? "square" : "butt";
-      context.stroke();
-    }
-  }
+  };
+  paintShapes(shapes, map);
+  paintShapes(substrateShapes, (point) => ({
+    x: width / 2 + point.x * pixelsPerMicrometer,
+    y: height / 2 - point.y * pixelsPerMicrometer,
+  }));
   return context;
 }
 
-function nativeMask(shapes: ReturnType<typeof flattenGds>, settings: MaskSettings) {
-  return rasterizeBinaryMask(shapes, settings, {
+function combinedMask(
+  shapes: ReturnType<typeof flattenGds>,
+  settings: MaskSettings,
+  substrateShapes: ReturnType<typeof flattenGds>,
+  options: Parameters<typeof rasterizeBinaryMask>[2],
+) {
+  const pixels = rasterizeBinaryMask(shapes, settings, options);
+  if (substrateShapes.length) {
+    const overlay = rasterizeBinaryMask(substrateShapes, SUBSTRATE_MASK_SETTINGS, options);
+    mergeBinaryOverlay(pixels, overlay, settings.inverted);
+  }
+  return pixels;
+}
+
+function nativeMask(
+  shapes: ReturnType<typeof flattenGds>,
+  settings: MaskSettings,
+  substrateShapes: ReturnType<typeof flattenGds>,
+) {
+  return combinedMask(shapes, settings, substrateShapes, {
     width: MARS_4_9K.width,
     height: MARS_4_9K.height,
     pixelMicrometers: MARS_4_9K.pixelMicrometers,
   });
 }
 
-function rasterizeMask(shapes: ReturnType<typeof flattenGds>, settings: MaskSettings) {
-  const pixels = nativeMask(shapes, settings);
+function rasterizeMask(
+  shapes: ReturnType<typeof flattenGds>,
+  settings: MaskSettings,
+  substrateShapes: ReturnType<typeof flattenGds>,
+) {
+  const pixels = nativeMask(shapes, settings, substrateShapes);
   const encoded = encodeBinaryLayer(
     (y: number) => pixels.subarray(y * MARS_4_9K.width, (y + 1) * MARS_4_9K.width),
     MARS_4_9K.width,
@@ -204,6 +238,8 @@ export default function Home() {
   const [showPreviewGrid, setShowPreviewGrid] = useState(false);
   const [substrateTemplateId, setSubstrateTemplateId] = useState("");
   const [waferMarker, setWaferMarker] = useState<"round" | "flat" | "notch">("round");
+  const [includeSubstrateOutline, setIncludeSubstrateOutline] = useState(false);
+  const [substrateLineWidth, setSubstrateLineWidth] = useState(180);
   const [inspection, setInspection] = useState({ x: Math.floor(MARS_4_9K.width / 2), y: Math.floor(MARS_4_9K.height / 2) });
   const [calibrationMode, setCalibrationMode] = useState(false);
   const [calibrationSeries, setCalibrationSeries] = useState("5, 7, 9, 11, 13");
@@ -230,6 +266,21 @@ export default function Home() {
       flatLength: substrateTemplate.flatLength,
     })
     : null;
+  const substrateOutlineShapes = useMemo(
+    () => substrateTemplate ? [createSubstrateOutlineShape({
+      shape: substrateTemplate.shape,
+      widthMillimeters: substrateTemplate.width,
+      heightMillimeters: substrateTemplate.height,
+      marker: substrateTemplate.shape === "circle" ? waferMarker : "round",
+      flatLengthMillimeters: substrateTemplate.shape === "circle" ? substrateTemplate.flatLength : undefined,
+      lineWidthMicrometers: substrateLineWidth,
+    })] : [],
+    [substrateTemplate, waferMarker, substrateLineWidth],
+  );
+  const exportedSubstrateShapes = useMemo(
+    () => includeSubstrateOutline ? substrateOutlineShapes : [],
+    [includeSubstrateOutline, substrateOutlineShapes],
+  );
   const outsideScreen = Boolean(visibleShapes.length && !fitsDisplay(
     visibleShapes,
     settings,
@@ -239,14 +290,14 @@ export default function Home() {
 
   useEffect(() => {
     if (!preview.current || !visibleShapes.length) return;
-    drawMask(preview.current, visibleShapes, settings, 1400, 710);
-  }, [visibleShapes, settings]);
+    drawMask(preview.current, visibleShapes, settings, 1400, 710, exportedSubstrateShapes);
+  }, [visibleShapes, settings, exportedSubstrateShapes]);
 
   useEffect(() => {
     if (!inspector.current || !visibleShapes.length) return;
     const offsetX = Math.max(0, Math.min(MARS_4_9K.width - INSPECTOR_SIZE, inspection.x - INSPECTOR_SIZE / 2));
     const offsetY = Math.max(0, Math.min(MARS_4_9K.height - INSPECTOR_SIZE, inspection.y - INSPECTOR_SIZE / 2));
-    const pixels = rasterizeBinaryMask(visibleShapes, settings, {
+    const pixels = combinedMask(visibleShapes, settings, exportedSubstrateShapes, {
       width: INSPECTOR_SIZE,
       height: INSPECTOR_SIZE,
       fullWidth: MARS_4_9K.width,
@@ -259,7 +310,7 @@ export default function Home() {
     context.strokeStyle = "#ff5a1f";
     context.lineWidth = 0.5;
     context.strokeRect(inspection.x - offsetX + 0.25, inspection.y - offsetY + 0.25, 0.5, 0.5);
-  }, [visibleShapes, settings, inspection]);
+  }, [visibleShapes, settings, inspection, exportedSubstrateShapes]);
 
   function inspectPreview(event: ReactMouseEvent<HTMLDivElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -383,6 +434,10 @@ export default function Home() {
       setSelectedLayers(restoredLayers);
       setSettings(restored.settings as MaskSettings);
       setProcessMetadata(restored.process);
+      setSubstrateTemplateId(restored.substrateOutline?.templateId ?? "");
+      setWaferMarker(restored.substrateOutline?.marker ?? "round");
+      setIncludeSubstrateOutline(restored.substrateOutline?.included ?? false);
+      setSubstrateLineWidth(restored.substrateOutline?.lineWidthMicrometers ?? 180);
       if (restored.exposures.length > 1) setCalibrationSeries(restored.exposures.join(", "));
       setMessage(`Run restored from ${file.name}. Verify the preview before export.`);
     } catch (error) {
@@ -434,6 +489,12 @@ export default function Home() {
           mirrorX: settings.mirrorX,
           mirrorY: settings.mirrorY,
         },
+        substrateOutline: substrateTemplate ? {
+          templateId: substrateTemplate.id,
+          marker: substrateTemplate.shape === "circle" ? waferMarker : "round",
+          included: includeSubstrateOutline,
+          lineWidthMicrometers: substrateLineWidth,
+        } : null,
       },
     });
   }
@@ -455,7 +516,7 @@ export default function Home() {
     setMessage("Rasterizing 36.8 million pixels locally…");
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     try {
-      const raster = rasterizeMask(visibleShapes, settings);
+      const raster = rasterizeMask(visibleShapes, settings, exportedSubstrateShapes);
       const { goo, check } = buildValidatedGoo(raster, settings.exposure);
       const baseName = outputBaseName();
       const gooName = `${baseName}.goo`;
@@ -476,7 +537,7 @@ export default function Home() {
       setBusy(true);
       setMessage(`Rasterizing calibration series for ${exposures.length} exposure(s)…`);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      const raster = rasterizeMask(visibleShapes, settings);
+      const raster = rasterizeMask(visibleShapes, settings, exportedSubstrateShapes);
       const outputNames: string[] = [];
       const entries: Array<{ name: string; data: Uint8Array | string }> = [];
       for (const exposure of exposures) {
@@ -505,7 +566,7 @@ export default function Home() {
     setMessage("Building reproducible experiment package…");
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     try {
-      const raster = rasterizeMask(visibleShapes, settings);
+      const raster = rasterizeMask(visibleShapes, settings, exportedSubstrateShapes);
       const baseName = outputBaseName();
       const gooName = `${baseName}.goo`;
       const pngName = `${baseName}-8520x4320.png`;
@@ -533,7 +594,7 @@ export default function Home() {
     setMessage("Generating 9K verification PNG…");
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     try {
-      const png = await encodePng(nativeMask(visibleShapes, settings));
+      const png = await encodePng(nativeMask(visibleShapes, settings, exportedSubstrateShapes));
       saveFile(png, `${fileName.replace(/\.gds(ii)?$/i, "") || "mask"}-8520x4320.png`, "image/png");
       setMessage("9K PNG generated. Use it to verify orientation and polarity.");
     } catch (error) {
@@ -772,7 +833,7 @@ export default function Home() {
                 />
                 <span>PIXEL GRID</span>
               </label>
-              <label className="template-control" title="Centred physical outline for placement only; never included in exports">
+              <label className="template-control" title="Centred physical substrate outline">
                 <span>SUBSTRATE OUTLINE</span>
                 <select value={substrateTemplateId} onChange={(event) => setSubstrateTemplateId(event.target.value)}>
                   <option value="">None</option>
@@ -790,6 +851,34 @@ export default function Home() {
                     <option value="notch">90° notch</option>
                   </select>
                 </label>
+              )}
+              {substrateTemplate && (
+                <>
+                  <label className="grid-control" title="Rasterize the selected outline into GOO, PNG and experiment ZIP outputs">
+                    <input
+                      type="checkbox"
+                      checked={includeSubstrateOutline}
+                      onChange={(event) => setIncludeSubstrateOutline(event.target.checked)}
+                    />
+                    <span>INCLUDE IN MASK</span>
+                  </label>
+                  <label className="template-control outline-width-control">
+                    <span>LINE WIDTH</span>
+                    <input
+                      type="number"
+                      min="36"
+                      max="1000"
+                      step="18"
+                      value={substrateLineWidth}
+                      disabled={!includeSubstrateOutline}
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        if (value >= 36 && value <= 1000) setSubstrateLineWidth(value);
+                      }}
+                    />
+                    <small>µm</small>
+                  </label>
+                </>
               )}
             </div>
           </div>
@@ -820,13 +909,13 @@ export default function Home() {
                             rx="0.5"
                           />
                         ) : <path className="wafer-outline" d={waferOutlinePath ?? undefined} />}
-                        <path className="centre-mark" d={`M ${MARS_4_9K.sizeX / 2 - 2} ${MARS_4_9K.sizeY / 2} h 4 M ${MARS_4_9K.sizeX / 2} ${MARS_4_9K.sizeY / 2 - 2} v 4`} />
+                        {!includeSubstrateOutline && <path className="centre-mark" d={`M ${MARS_4_9K.sizeX / 2 - 2} ${MARS_4_9K.sizeY / 2} h 4 M ${MARS_4_9K.sizeX / 2} ${MARS_4_9K.sizeY / 2 - 2} v 4`} />}
                       </svg>
                       <span style={{ top: `${(MARS_4_9K.sizeY - substrateTemplate.height) / 2 / MARS_4_9K.sizeY * 100}%` }}>
                         {substrateTemplate.label}
                         {waferMarker === "flat" && substrateTemplate.shape === "circle" ? ` · FLAT ${substrateTemplate.flatLength} mm` : ""}
                         {waferMarker === "notch" && substrateTemplate.shape === "circle" ? " · NOTCH 1 mm / 90°" : ""}
-                        {" · PREVIEW ONLY"}
+                        {includeSubstrateOutline ? ` · INCLUDED ${substrateLineWidth} µm` : " · PREVIEW ONLY"}
                       </span>
                     </div>
                   )}
@@ -878,6 +967,7 @@ export default function Home() {
           <div><dt>Placement</dt><dd>{settings.anchor} · X {settings.offsetX} µm · Y {settings.offsetY} µm · {settings.rotation}°</dd></div>
           <div><dt>Orientation</dt><dd>{settings.mirrorX ? "Mirror X · " : ""}{settings.mirrorY ? "Mirror Y · " : ""}{settings.inverted ? "Exposed background" : "Exposed geometry"}</dd></div>
           <div><dt>Layout / minimum feature</dt><dd>{bounds ? `${(bounds.width / 1000).toFixed(3)} × ${(bounds.height / 1000).toFixed(3)} mm` : "—"} · {minimumFeature === null ? "—" : `${minimumFeature.toFixed(1)} µm`}</dd></div>
+          <div><dt>Substrate outline</dt><dd>{substrateTemplate ? `${substrateTemplate.label} · ${includeSubstrateOutline ? `included at ${substrateLineWidth} µm` : "preview only"}` : "—"}</dd></div>
           <div><dt>Photoresist / thickness</dt><dd>{processMetadata.photoresist || "—"} · {processMetadata.thicknessNm ? `${processMetadata.thicknessNm} nm` : "—"}</dd></div>
           <div><dt>Soft bake</dt><dd>{processMetadata.softBake || "—"}</dd></div>
           <div><dt>Development</dt><dd>{processMetadata.development || "—"}</dd></div>

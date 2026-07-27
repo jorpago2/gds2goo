@@ -5,9 +5,9 @@ import { fitsDisplay, flattenGds, parseGds, placedBoundsOf } from "../lib/gds.js
 import { buildGooFile, encodeBinaryLayer, validateGooFile } from "../lib/goo.js";
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "../lib/calibration.js";
 import { createRunManifest, parseRunManifest } from "../lib/manifest.js";
-import { createMonochromePreview, rasterizeBinaryMask } from "../lib/raster.js";
+import { createMonochromePreview, mergeBinaryOverlay, rasterizeBinaryMask } from "../lib/raster.js";
 import { buildZip } from "../lib/zip.js";
-import { createWaferOutlinePath } from "../lib/substrate.js";
+import { createSubstrateOutlineShape, createWaferOutlinePath } from "../lib/substrate.js";
 
 function record(type, dataType, payload = []) {
   const length = payload.length + 4;
@@ -228,6 +228,22 @@ test("creates physically dimensioned wafer flat and notch outlines", () => {
   const notch = createWaferOutlinePath({ centreX: 0, centreY: 0, diameter: 50.8, marker: "notch" });
   assert.match(notch, /L 0 24\.4 Z$/);
   assert.throws(() => createWaferOutlinePath({ centreX: 0, centreY: 0, diameter: 50.8, marker: "flat", flatLength: 60 }), /Flat length/);
+
+  const maskShape = createSubstrateOutlineShape({
+    shape: "circle",
+    widthMillimeters: 50.8,
+    heightMillimeters: 50.8,
+    marker: "flat",
+    flatLengthMillimeters: 15.88,
+    lineWidthMicrometers: 180,
+  });
+  assert.equal(maskShape.kind, "path");
+  assert.equal(maskShape.width, 180);
+  assert.ok(Math.abs(maskShape.points[0].x - 7940) < 1e-9);
+  assert.equal(maskShape.points.at(-1), maskShape.points[0]);
+
+  assert.deepEqual([...mergeBinaryOverlay(new Uint8Array([0, 1, 0]), new Uint8Array([1, 1, 0]))], [1, 1, 0]);
+  assert.deepEqual([...mergeBinaryOverlay(new Uint8Array([1, 0, 1]), new Uint8Array([1, 1, 0]), true)], [0, 0, 1]);
 });
 
 test("creates a reproducible run manifest", () => {
@@ -238,6 +254,7 @@ test("creates a reproducible run manifest", () => {
       selectedLayers: [1, 3],
       polarity: "exposed-geometry",
       placement: { anchor: "center", anchorXMicrometers: 0, anchorYMicrometers: 0, rotationDegrees: 0, mirrorX: false, mirrorY: false },
+      substrateOutline: { templateId: "wafer-2", marker: "flat", included: true, lineWidthMicrometers: 180 },
     },
     exposures: [7, 9, 11],
     process: { photoresist: "AZ1505", thicknessNm: "600", softBake: "100 C, 60 s", development: "45 s", notes: "test" },
@@ -250,7 +267,11 @@ test("creates a reproducible run manifest", () => {
   const restored = parseRunManifest(JSON.stringify(manifest));
   assert.equal(restored.settings.exposure, 7);
   assert.deepEqual(restored.selectedLayers, [1, 3]);
+  assert.deepEqual(restored.substrateOutline, { templateId: "wafer-2", marker: "flat", included: true, lineWidthMicrometers: 180 });
   assert.equal(restored.process.thicknessNm, "600");
+  const invalidSubstrate = structuredClone(manifest);
+  invalidSubstrate.mask.substrateOutline.lineWidthMicrometers = 1001;
+  assert.throws(() => parseRunManifest(invalidSubstrate), /between 36 and 1000/);
   assert.throws(() => parseRunManifest("{}"), /schema/);
 });
 
