@@ -2,6 +2,8 @@
 
 Conversor local de layouts GDSII a archivos de exposición `.goo` de una capa para la Elegoo Mars 4 9K.
 
+**Web:** https://jorpago2.github.io/gds2goo/
+
 ## Alcance
 
 - Lee `BOUNDARY`, `BOX`, `PATH`, `SREF` y `AREF`, incluidas magnificación, rotación y reflexión.
@@ -19,6 +21,8 @@ pnpm install
 pnpm dev
 pnpm test
 ```
+
+Cada cambio en `main` se publica automáticamente en GitHub Pages mediante GitHub Actions.
 
 ## Supuestos y seguridad experimental
 
