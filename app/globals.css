@@ -155,7 +155,7 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, input[type
 .substrate-template { position: absolute; inset: 0; z-index: 1; pointer-events: none; color: var(--orange); }
 .substrate-template svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .substrate-template circle, .substrate-template rect, .substrate-template path { fill: none; stroke: currentColor; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-.substrate-template path { stroke-dasharray: 3 2; }
+.substrate-template .centre-mark { stroke-dasharray: 3 2; }
 .substrate-template > span { position: absolute; left: 50%; transform: translate(-50%, -100%); padding: 3px 5px; background: rgba(5,8,7,.82); color: #ffb499; font: 700 8px/1 var(--font-geist-mono), monospace; letter-spacing: .05em; white-space: nowrap; }
 .preview-pixel-grid { position: absolute; inset: 0; z-index: 2; pointer-events: none; background-image: linear-gradient(to right, rgba(255,90,31,.5) .4px, transparent .4px), linear-gradient(to bottom, rgba(255,90,31,.5) .4px, transparent .4px); background-size: calc(100% / 8520) calc(100% / 4320); }
 .empty-preview { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; color: #e3f8c2; }

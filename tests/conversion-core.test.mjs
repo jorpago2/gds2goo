@@ -7,6 +7,7 @@ import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSer
 import { createRunManifest, parseRunManifest } from "../lib/manifest.js";
 import { createMonochromePreview, rasterizeBinaryMask } from "../lib/raster.js";
 import { buildZip } from "../lib/zip.js";
+import { createWaferOutlinePath } from "../lib/substrate.js";
 
 function record(type, dataType, payload = []) {
   const length = payload.length + 4;
@@ -217,6 +218,16 @@ test("creates a bounded, asymmetric printer orientation pattern", () => {
   assert.equal(shapes.length, 30);
   assert.equal(shapes.every((shape) => shape.points.every((point) => point.x % 18 === 0 && point.y % 18 === 0)), true);
   assert.equal(fitsDisplay(shapes, { anchor: "center", offsetX: 0, offsetY: 0, rotation: 0, mirrorX: false, mirrorY: false }, 153360, 77760), true);
+});
+
+test("creates physically dimensioned wafer flat and notch outlines", () => {
+  const flat = createWaferOutlinePath({ centreX: 0, centreY: 0, diameter: 50.8, marker: "flat", flatLength: 15.88 });
+  assert.match(flat, /^M -7\.94 /);
+  assert.match(flat, /A 25\.4 25\.4 0 1 1 7\.94 /);
+
+  const notch = createWaferOutlinePath({ centreX: 0, centreY: 0, diameter: 50.8, marker: "notch" });
+  assert.match(notch, /L 0 24\.4 Z$/);
+  assert.throws(() => createWaferOutlinePath({ centreX: 0, centreY: 0, diameter: 50.8, marker: "flat", flatLength: 60 }), /Flat length/);
 });
 
 test("creates a reproducible run manifest", () => {

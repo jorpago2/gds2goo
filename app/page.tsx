@@ -14,6 +14,7 @@ import { buildGooFile, encodeBinaryLayer, MARS_4_9K, validateGooFile } from "@/l
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "@/lib/calibration.js";
 import { createRunManifest, parseRunManifest } from "@/lib/manifest.js";
 import { createMonochromePreview, rasterizeBinaryMask } from "@/lib/raster.js";
+import { createWaferOutlinePath } from "@/lib/substrate.js";
 import { buildZip } from "@/lib/zip.js";
 
 type MaskSettings = {
@@ -41,9 +42,9 @@ const DEFAULT_SETTINGS: MaskSettings = {
 const INSPECTOR_SIZE = 64;
 
 const SUBSTRATE_TEMPLATES = [
-  { id: "wafer-1", label: "1-inch wafer · Ø25.4 mm", shape: "circle", width: 25.4, height: 25.4 },
-  { id: "wafer-2", label: "2-inch wafer · Ø50.8 mm", shape: "circle", width: 50.8, height: 50.8 },
-  { id: "wafer-3", label: "3-inch wafer · Ø76.2 mm", shape: "circle", width: 76.2, height: 76.2 },
+  { id: "wafer-1", label: "1-inch wafer · Ø25.4 mm", shape: "circle", width: 25.4, height: 25.4, flatLength: 4 },
+  { id: "wafer-2", label: "2-inch wafer · Ø50.8 mm", shape: "circle", width: 50.8, height: 50.8, flatLength: 15.88 },
+  { id: "wafer-3", label: "3-inch wafer · Ø76.2 mm", shape: "circle", width: 76.2, height: 76.2, flatLength: 22.22 },
   { id: "slide-75x25", label: "Microscope slide · 75 × 25 mm", shape: "rectangle", width: 75, height: 25 },
 ] as const;
 
@@ -202,6 +203,7 @@ export default function Home() {
   const [previewZoom, setPreviewZoom] = useState(1);
   const [showPreviewGrid, setShowPreviewGrid] = useState(false);
   const [substrateTemplateId, setSubstrateTemplateId] = useState("");
+  const [waferMarker, setWaferMarker] = useState<"round" | "flat" | "notch">("round");
   const [inspection, setInspection] = useState({ x: Math.floor(MARS_4_9K.width / 2), y: Math.floor(MARS_4_9K.height / 2) });
   const [calibrationMode, setCalibrationMode] = useState(false);
   const [calibrationSeries, setCalibrationSeries] = useState("5, 7, 9, 11, 13");
@@ -219,6 +221,15 @@ export default function Home() {
     [visibleShapes],
   );
   const substrateTemplate = SUBSTRATE_TEMPLATES.find(({ id }) => id === substrateTemplateId);
+  const waferOutlinePath = substrateTemplate?.shape === "circle" && waferMarker !== "round"
+    ? createWaferOutlinePath({
+      centreX: MARS_4_9K.sizeX / 2,
+      centreY: MARS_4_9K.sizeY / 2,
+      diameter: substrateTemplate.width,
+      marker: waferMarker,
+      flatLength: substrateTemplate.flatLength,
+    })
+    : null;
   const outsideScreen = Boolean(visibleShapes.length && !fitsDisplay(
     visibleShapes,
     settings,
@@ -770,6 +781,16 @@ export default function Home() {
                   ))}
                 </select>
               </label>
+              {substrateTemplate?.shape === "circle" && (
+                <label className="template-control" title="SEMI nominal flat for 2/3-inch wafers; the 1-inch flat is a 4 mm guide. The 1 mm, 90° notch is a reference geometry and is not standard for these wafer diameters.">
+                  <span>EDGE MARKER</span>
+                  <select value={waferMarker} onChange={(event) => setWaferMarker(event.target.value as typeof waferMarker)}>
+                    <option value="round">None</option>
+                    <option value="flat">Primary flat</option>
+                    <option value="notch">90° notch</option>
+                  </select>
+                </label>
+              )}
             </div>
           </div>
           <div className="lcd-shell">
@@ -784,13 +805,13 @@ export default function Home() {
                   {substrateTemplate && (
                     <div className="substrate-template" aria-hidden="true">
                       <svg viewBox={`0 0 ${MARS_4_9K.sizeX} ${MARS_4_9K.sizeY}`} preserveAspectRatio="none">
-                        {substrateTemplate.shape === "circle" ? (
+                        {substrateTemplate.shape === "circle" && waferMarker === "round" ? (
                           <circle
                             cx={MARS_4_9K.sizeX / 2}
                             cy={MARS_4_9K.sizeY / 2}
                             r={substrateTemplate.width / 2}
                           />
-                        ) : (
+                        ) : substrateTemplate.shape === "rectangle" ? (
                           <rect
                             x={(MARS_4_9K.sizeX - substrateTemplate.width) / 2}
                             y={(MARS_4_9K.sizeY - substrateTemplate.height) / 2}
@@ -798,11 +819,14 @@ export default function Home() {
                             height={substrateTemplate.height}
                             rx="0.5"
                           />
-                        )}
-                        <path d={`M ${MARS_4_9K.sizeX / 2 - 2} ${MARS_4_9K.sizeY / 2} h 4 M ${MARS_4_9K.sizeX / 2} ${MARS_4_9K.sizeY / 2 - 2} v 4`} />
+                        ) : <path className="wafer-outline" d={waferOutlinePath ?? undefined} />}
+                        <path className="centre-mark" d={`M ${MARS_4_9K.sizeX / 2 - 2} ${MARS_4_9K.sizeY / 2} h 4 M ${MARS_4_9K.sizeX / 2} ${MARS_4_9K.sizeY / 2 - 2} v 4`} />
                       </svg>
                       <span style={{ top: `${(MARS_4_9K.sizeY - substrateTemplate.height) / 2 / MARS_4_9K.sizeY * 100}%` }}>
-                        {substrateTemplate.label} · PREVIEW ONLY
+                        {substrateTemplate.label}
+                        {waferMarker === "flat" && substrateTemplate.shape === "circle" ? ` · FLAT ${substrateTemplate.flatLength} mm` : ""}
+                        {waferMarker === "notch" && substrateTemplate.shape === "circle" ? " · NOTCH 1 mm / 90°" : ""}
+                        {" · PREVIEW ONLY"}
                       </span>
                     </div>
                   )}
