@@ -267,7 +267,7 @@ export default function Home() {
       <section className="hero" id="top">
         <div>
           <p className="eyebrow">MASKLESS PHOTOLITHOGRAPHY TOOL</p>
-          <h1>From GDS layout to the<br /><em>UV display.</em></h1>
+          <h1>From GDS layout to the <em>UV display.</em></h1>
         </div>
         <p className="hero-copy">Rasterize physical geometries at native pixel resolution and generate a single-layer <code>.goo</code> exposure for the Mars 4 9K.</p>
       </section>
