@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import { fitsDisplay, flattenGds, parseGds, placedBoundsOf } from "../lib/gds.js";
 import { buildGooFile, encodeBinaryLayer, validateGooFile } from "../lib/goo.js";
 import { createCalibrationShapes, parseExposureSeries } from "../lib/calibration.js";
 import { createRunManifest } from "../lib/manifest.js";
+import { createMonochromePreview, rasterizeBinaryMask } from "../lib/raster.js";
 
 function record(type, dataType, payload = []) {
   const length = payload.length + 4;
@@ -27,6 +29,27 @@ function real8(input) {
     mantissa >>= 8n;
   }
   return bytes;
+}
+
+function decodeGooLayerIndependently(bytes) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const layerStart = 0x2fb95;
+  const encodedLength = view.getUint32(layerStart + 66, false) - 2;
+  let offset = layerStart + 71;
+  const end = offset + encodedLength;
+  const pixels = [];
+  while (offset < end) {
+    const head = bytes[offset++];
+    const color = head >> 6;
+    if (color !== 0 && color !== 3) throw new Error(`Unsupported golden-test GOO color code ${color}.`);
+    const byteCount = (head >> 4) & 3;
+    let runLength = head & 0x0f;
+    if (byteCount === 1) runLength += bytes[offset++] << 4;
+    else if (byteCount === 2) runLength += (bytes[offset++] << 12) + (bytes[offset++] << 4);
+    else if (byteCount === 3) runLength += (bytes[offset++] << 20) + (bytes[offset++] << 12) + (bytes[offset++] << 4);
+    for (let index = 0; index < runLength; index += 1) pixels.push(color === 3 ? 1 : 0);
+  }
+  return Uint8Array.from(pixels);
 }
 
 test("parses and flattens a minimal GDSII boundary", () => {
@@ -90,6 +113,61 @@ test("encodes a binary layer and validates the resulting GOO container", () => {
   const result = validateGooFile(goo, 8);
   assert.equal(result.pixels, 8);
   assert.equal(encoded.whitePixels, 3);
+  assert.deepEqual([...decodeGooLayerIndependently(goo)], [...rows.flatMap((row) => [...row])]);
+});
+
+test("rasterizes native pixels with a stable pixel-centre rule", () => {
+  const shape = {
+    kind: "polygon",
+    layer: 1,
+    datatype: 0,
+    width: 0,
+    pathType: 0,
+    points: [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 2, y: 2 }, { x: 0, y: 2 }],
+  };
+  const settings = { anchor: "gds-origin", offsetX: 0, offsetY: 0, rotation: 0, mirrorX: false, mirrorY: false, inverted: false };
+  const pixels = rasterizeBinaryMask([shape], settings, { width: 8, height: 6, pixelMicrometers: 1 });
+  assert.deepEqual([
+    ...Array.from({ length: 6 }, (_, y) => [...pixels.subarray(y * 8, (y + 1) * 8)].join("")),
+  ], ["00000000", "00001100", "00001100", "00000000", "00000000", "00000000"]);
+
+  const inverted = rasterizeBinaryMask([shape], { ...settings, inverted: true }, { width: 8, height: 6, pixelMicrometers: 1 });
+  assert.equal(inverted.every((value, index) => value === 1 - pixels[index]), true);
+
+  const preview = createMonochromePreview(pixels, 8, 6, 4, 4);
+  assert.deepEqual([...preview], [0, 0, 0, 0, 0, 0, 0xffff, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  const invertedPreview = createMonochromePreview(inverted, 8, 6, 4, 4, 1);
+  assert.deepEqual([...invertedPreview], [...preview].map((value) => 0xffff - value));
+});
+
+test("rasterizes GDS path end styles without antialiasing", () => {
+  const settings = { anchor: "gds-origin", offsetX: 0, offsetY: 0, rotation: 0, mirrorX: false, mirrorY: false, inverted: false };
+  const path = {
+    kind: "path",
+    layer: 1,
+    datatype: 0,
+    width: 2,
+    pathType: 0,
+    points: [{ x: -2, y: 0 }, { x: 2, y: 0 }],
+  };
+  const butt = rasterizeBinaryMask([path], settings, { width: 8, height: 6, pixelMicrometers: 1 });
+  const square = rasterizeBinaryMask([{ ...path, pathType: 2 }], settings, { width: 8, height: 6, pixelMicrometers: 1 });
+  const round = rasterizeBinaryMask([{ ...path, pathType: 1 }], settings, { width: 8, height: 6, pixelMicrometers: 1 });
+  assert.equal(butt.reduce((sum, value) => sum + value, 0), 8);
+  assert.equal(square.reduce((sum, value) => sum + value, 0), 12);
+  assert.equal(round.reduce((sum, value) => sum + value, 0), 12);
+});
+
+test("keeps a fixed GOO byte-level golden reference", () => {
+  const rows = [new Uint8Array([0, 0, 1, 1]), new Uint8Array([1, 0, 0, 0])];
+  const encoded = encodeBinaryLayer((y) => rows[y], 4, 2);
+  const goo = buildGooFile({
+    layerData: encoded.data,
+    exposureSeconds: 9,
+    whitePixels: encoded.whitePixels,
+    createdAt: new Date("2026-01-02T03:04:05.000Z"),
+  });
+  assert.equal(createHash("sha256").update(goo).digest("hex"), "0b3cd313b3f63f457ef8100b91a4477ca4be1f9cd16d306cf3f5a2d59800fd3f");
 });
 
 test("validates placement after anchor, rotation and offsets", () => {

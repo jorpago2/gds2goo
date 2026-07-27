@@ -7,7 +7,7 @@ Local converter from GDSII layouts to single-layer `.goo` exposure files for the
 ## Scope
 
 - Reads `BOUNDARY`, `BOX`, `PATH`, `SREF` and `AREF`, including magnification, rotation and reflection.
-- Preserves the physical GDS units and rasterizes to 8520 × 4320 pixels at 18 µm/pixel.
+- Preserves the physical GDS units and rasterizes to 8520 × 4320 pixels at 18 µm/pixel using a deterministic pixel-centre rule.
 - Supports layer selection, preview zoom and grid, translation, rotation, mirroring and mask inversion.
 - Supports layout-centre, GDS-origin and lower-left placement anchors, with clipping validation after all transformations.
 - Includes a native 64 × 64 pixel inspector and a true 8520 × 4320 LCD pixel grid at 8× zoom.
@@ -31,3 +31,5 @@ Every change to `main` is published automatically to GitHub Pages through GitHub
 ## Assumptions and experimental safety
 
 The profile is fixed to the Mars 4 9K (153.36 × 77.76 mm, 18 µm/pixel), one 0.05 mm layer and 9 s as an initial value. The 9 s value comes from Wu et al., *Small Methods* 9 (2025), e01336, for LOR2A/AZ1505 and does not replace a process-specific dose matrix. Always verify the PNG, polarity and on-screen orientation without a sample before exposing photoresist.
+
+The automated checks include a human-readable native-pixel mask, an independent GOO layer decoder and a fixed byte-level GOO reference. UVtools 6.1.0 independently decoded the calibration reference with the same 341,880 active pixels and 7,322 × 2,442 px bounds. This is not printer certification: before experimental use, validate orientation, polarity and exposure on the target printer without photoresist.

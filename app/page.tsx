@@ -13,6 +13,7 @@ import {
 import { buildGooFile, encodeBinaryLayer, MARS_4_9K, validateGooFile } from "@/lib/goo.js";
 import { createCalibrationShapes, parseExposureSeries } from "@/lib/calibration.js";
 import { createRunManifest } from "@/lib/manifest.js";
+import { createMonochromePreview, rasterizeBinaryMask } from "@/lib/raster.js";
 
 type MaskSettings = {
   exposure: number;
@@ -37,13 +38,6 @@ const DEFAULT_SETTINGS: MaskSettings = {
 };
 
 const INSPECTOR_SIZE = 64;
-
-type RasterViewport = {
-  fullWidth: number;
-  fullHeight: number;
-  offsetX: number;
-  offsetY: number;
-};
 
 type ProcessMetadata = {
   photoresist: string;
@@ -74,21 +68,18 @@ function drawMask(
   settings: MaskSettings,
   width: number,
   height: number,
-  viewport?: RasterViewport,
 ) {
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext("2d", { alpha: false });
   if (!context) throw new Error("The browser could not create the mask canvas.");
   const anchor = placementAnchorOf(shapes, settings.anchor);
-  const fullWidth = viewport?.fullWidth ?? width;
-  const fullHeight = viewport?.fullHeight ?? height;
-  const pixelsPerMicrometer = fullWidth / (MARS_4_9K.sizeX * 1000);
+  const pixelsPerMicrometer = width / (MARS_4_9K.sizeX * 1000);
   const map = (point: { x: number; y: number }) => {
     const transformed = transformPlacedPoint(point, anchor, settings);
     return {
-      x: fullWidth / 2 + transformed.x * pixelsPerMicrometer - (viewport?.offsetX ?? 0),
-      y: fullHeight / 2 - transformed.y * pixelsPerMicrometer - (viewport?.offsetY ?? 0),
+      x: width / 2 + transformed.x * pixelsPerMicrometer,
+      y: height / 2 - transformed.y * pixelsPerMicrometer,
     };
   };
 
@@ -118,34 +109,43 @@ function drawMask(
   return context;
 }
 
-function previewPixels(shapes: ReturnType<typeof flattenGds>, settings: MaskSettings, width: number, height: number) {
-  const canvas = document.createElement("canvas");
-  const context = drawMask(canvas, shapes, settings, width, height);
-  const rgba = context.getImageData(0, 0, width, height).data;
-  const pixels = new Uint16Array(width * height);
-  for (let i = 0; i < pixels.length; i += 1) pixels[i] = rgba[i * 4] > 127 ? 0xffff : 0x0000;
-  return pixels;
+function nativeMask(shapes: ReturnType<typeof flattenGds>, settings: MaskSettings) {
+  return rasterizeBinaryMask(shapes, settings, {
+    width: MARS_4_9K.width,
+    height: MARS_4_9K.height,
+    pixelMicrometers: MARS_4_9K.pixelMicrometers,
+  });
 }
 
 function rasterizeMask(shapes: ReturnType<typeof flattenGds>, settings: MaskSettings) {
-  const canvas = document.createElement("canvas");
-  try {
-    const context = drawMask(canvas, shapes, settings, MARS_4_9K.width, MARS_4_9K.height);
-    const encoded = encodeBinaryLayer((y: number) => {
-      const rgba = context.getImageData(0, y, MARS_4_9K.width, 1).data;
-      const row = new Uint8Array(MARS_4_9K.width);
-      for (let x = 0; x < row.length; x += 1) row[x] = rgba[x * 4] > 127 ? 1 : 0;
-      return row;
-    }, MARS_4_9K.width, MARS_4_9K.height);
-    return {
-      encoded,
-      smallPreview: previewPixels(shapes, settings, 116, 116),
-      bigPreview: previewPixels(shapes, settings, 290, 290),
-    };
-  } finally {
-    canvas.width = 1;
-    canvas.height = 1;
+  const pixels = nativeMask(shapes, settings);
+  const encoded = encodeBinaryLayer(
+    (y: number) => pixels.subarray(y * MARS_4_9K.width, (y + 1) * MARS_4_9K.width),
+    MARS_4_9K.width,
+    MARS_4_9K.height,
+  );
+  return {
+    encoded,
+    smallPreview: createMonochromePreview(pixels, MARS_4_9K.width, MARS_4_9K.height, 116, 116, settings.inverted ? 1 : 0),
+    bigPreview: createMonochromePreview(pixels, MARS_4_9K.width, MARS_4_9K.height, 290, 290, settings.inverted ? 1 : 0),
+  };
+}
+
+function drawBinaryPixels(canvas: HTMLCanvasElement, pixels: Uint8Array, width: number, height: number) {
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { alpha: false });
+  if (!context) throw new Error("The browser could not create the binary mask canvas.");
+  const image = context.createImageData(width, height);
+  for (let index = 0; index < pixels.length; index += 1) {
+    const value = pixels[index] ? 255 : 0;
+    image.data[index * 4] = value;
+    image.data[index * 4 + 1] = value;
+    image.data[index * 4 + 2] = value;
+    image.data[index * 4 + 3] = 255;
   }
+  context.putImageData(image, 0, 0);
+  return context;
 }
 
 function saveFile(bytes: BlobPart, name: string, type: string) {
@@ -210,12 +210,16 @@ export default function Home() {
     if (!inspector.current || !visibleShapes.length) return;
     const offsetX = Math.max(0, Math.min(MARS_4_9K.width - INSPECTOR_SIZE, inspection.x - INSPECTOR_SIZE / 2));
     const offsetY = Math.max(0, Math.min(MARS_4_9K.height - INSPECTOR_SIZE, inspection.y - INSPECTOR_SIZE / 2));
-    const context = drawMask(inspector.current, visibleShapes, settings, INSPECTOR_SIZE, INSPECTOR_SIZE, {
+    const pixels = rasterizeBinaryMask(visibleShapes, settings, {
+      width: INSPECTOR_SIZE,
+      height: INSPECTOR_SIZE,
       fullWidth: MARS_4_9K.width,
       fullHeight: MARS_4_9K.height,
       offsetX,
       offsetY,
+      pixelMicrometers: MARS_4_9K.pixelMicrometers,
     });
+    const context = drawBinaryPixels(inspector.current, pixels, INSPECTOR_SIZE, INSPECTOR_SIZE);
     context.strokeStyle = "#ff5a1f";
     context.lineWidth = 0.5;
     context.strokeRect(inspection.x - offsetX + 0.25, inspection.y - offsetY + 0.25, 0.5, 0.5);
@@ -406,7 +410,7 @@ export default function Home() {
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const canvas = document.createElement("canvas");
     try {
-      drawMask(canvas, visibleShapes, settings, MARS_4_9K.width, MARS_4_9K.height);
+      drawBinaryPixels(canvas, nativeMask(visibleShapes, settings), MARS_4_9K.width, MARS_4_9K.height);
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
       if (!blob) throw new Error("The browser could not encode the PNG.");
       saveFile(blob, `${fileName.replace(/\.gds(ii)?$/i, "") || "mask"}-8520x4320.png`, "image/png");
