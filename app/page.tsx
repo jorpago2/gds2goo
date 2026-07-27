@@ -443,7 +443,25 @@ export default function Home() {
         <p className="hero-copy">Rasterize physical geometries at native pixel resolution and generate a single-layer <code>.goo</code> exposure for the Mars 4 9K.</p>
       </section>
 
-      <section className="workspace" aria-label="GDS to GOO converter">
+      <details className="quick-guide">
+        <summary>
+          <span><b>QUICK GUIDE</b> From layout to a verified exposure</span>
+          <small>5 steps · about 2 min</small>
+        </summary>
+        <div className="guide-body">
+          <ol>
+            <li><span>01</span><div><strong>Prepare the layout</strong><p>Confirm the GDS physical units and prefer features of at least 36 µm for a robust first test.</p></div></li>
+            <li><span>02</span><div><strong>Load and select</strong><p>Drop the GDS, choose its top cell and enable only the layers that must be exposed.</p></div></li>
+            <li><span>03</span><div><strong>Place the mask</strong><p>Set the anchor, rotation, mirrors and offsets. Export remains disabled if geometry is clipped.</p></div></li>
+            <li><span>04</span><div><strong>Calibrate the dose</strong><p>Use the built-in pattern and an exposure series for each resist, thickness, bake and development process.</p></div></li>
+            <li><span>05</span><div><strong>Inspect and export</strong><p>Check polarity and native pixels, then export GOO, PNG and the reproducibility manifest.</p></div></li>
+          </ol>
+          <p className="guide-safety"><strong>First run:</strong> verify the GOO in UVtools and perform a dry exposure without photoresist. The default 9 s is a starting point, not a universal dose.</p>
+          <a href="#converter">Open the converter <span aria-hidden="true">↓</span></a>
+        </div>
+      </details>
+
+      <section className="workspace" id="converter" aria-label="GDS to GOO converter">
         <aside className="controls">
           <div className="step-heading"><span>01</span><div><p>INPUT</p><h2>File and layers</h2></div></div>
           <div
