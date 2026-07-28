@@ -1094,7 +1094,7 @@ export default function Home() {
                 <input
                   type="range"
                   min="1"
-                  max="8"
+                  max="32"
                   step="0.5"
                   value={previewZoom}
                   disabled={!visibleShapes.length}
