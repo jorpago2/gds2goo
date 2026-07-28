@@ -10,7 +10,7 @@ import { createMonochromePreview, mergeBinaryOverlay, rasterizeBinaryMask } from
 import { parseRecipeLibrary, saveRecipeToLibrary } from "../lib/recipes.js";
 import { buildZip } from "../lib/zip.js";
 import { createAlignmentMarkShapes, createSubstrateOutlineShape } from "../lib/substrate.js";
-import { calculateViewerZoom } from "../lib/viewer.js";
+import { calculateViewerRasterSize, calculateViewerZoom } from "../lib/viewer.js";
 
 function record(type, dataType, payload = []) {
   const length = payload.length + 4;
@@ -280,6 +280,9 @@ test("zooms the viewer smoothly within its physical inspection limits", () => {
   assert.ok(calculateViewerZoom(2, -20, true) > calculateViewerZoom(2, -20));
   assert.equal(calculateViewerZoom(8, -1000), 8);
   assert.equal(calculateViewerZoom(1, 1000, true), 1);
+  assert.deepEqual(calculateViewerRasterSize(1, 8520, 4320), { width: 1400, height: 710 });
+  assert.deepEqual(calculateViewerRasterSize(2.1, 8520, 4320), { width: 5600, height: 2839 });
+  assert.deepEqual(calculateViewerRasterSize(8, 8520, 4320), { width: 8520, height: 4320 });
 });
 
 test("creates a reproducible run manifest", () => {

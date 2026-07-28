@@ -7,8 +7,6 @@ import {
   fitsDisplay,
   flattenGds,
   parseGds,
-  placementAnchorOf,
-  transformPlacedPoint,
 } from "@/lib/gds.js";
 import { buildGooFile, encodeBinaryLayer, MARS_4_9K, validateGooFile } from "@/lib/goo.js";
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "@/lib/calibration.js";
@@ -17,7 +15,7 @@ import { createRunManifest, parseRunManifest } from "@/lib/manifest.js";
 import { createMonochromePreview, mergeBinaryOverlay, rasterizeBinaryMask } from "@/lib/raster.js";
 import { parseRecipeLibrary, saveRecipeToLibrary } from "@/lib/recipes.js";
 import { createAlignmentMarkShapes, createSubstrateOutlineShape } from "@/lib/substrate.js";
-import { calculateViewerZoom } from "@/lib/viewer.js";
+import { calculateViewerRasterSize, calculateViewerZoom } from "@/lib/viewer.js";
 import { buildZip } from "@/lib/zip.js";
 
 type MaskSettings = {
@@ -92,64 +90,6 @@ const DEFAULT_PROCESS: ProcessMetadata = {
   development: "",
   notes: "",
 };
-
-function drawMask(
-  canvas: HTMLCanvasElement,
-  shapes: ReturnType<typeof flattenGds>,
-  settings: MaskSettings,
-  width: number,
-  height: number,
-  substrateShapes: ReturnType<typeof flattenGds> = [],
-) {
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext("2d", { alpha: false });
-  if (!context) throw new Error("The browser could not create the mask canvas.");
-  const anchor = placementAnchorOf(shapes, settings.anchor);
-  const pixelsPerMicrometer = width / (MARS_4_9K.sizeX * 1000);
-  const map = (point: { x: number; y: number }) => {
-    const transformed = transformPlacedPoint(point, anchor, settings);
-    return {
-      x: width / 2 + transformed.x * pixelsPerMicrometer,
-      y: height / 2 - transformed.y * pixelsPerMicrometer,
-    };
-  };
-
-  context.fillStyle = settings.inverted ? "#fff" : "#000";
-  context.fillRect(0, 0, width, height);
-  context.fillStyle = settings.inverted ? "#000" : "#fff";
-  context.strokeStyle = context.fillStyle;
-  context.lineJoin = "miter";
-
-  const paintShapes = (
-    shapesToPaint: ReturnType<typeof flattenGds>,
-    pointMap: (point: { x: number; y: number }) => { x: number; y: number },
-  ) => {
-    for (const shape of shapesToPaint) {
-      const first = pointMap(shape.points[0]);
-      context.beginPath();
-      context.moveTo(first.x, first.y);
-      for (let i = 1; i < shape.points.length; i += 1) {
-        const point = pointMap(shape.points[i]);
-        context.lineTo(point.x, point.y);
-      }
-      if (shape.kind === "polygon") {
-        context.closePath();
-        context.fill("evenodd");
-      } else {
-        context.lineWidth = Math.max(1, shape.width * pixelsPerMicrometer);
-        context.lineCap = shape.pathType === 1 ? "round" : shape.pathType === 2 ? "square" : "butt";
-        context.stroke();
-      }
-    }
-  };
-  paintShapes(shapes, map);
-  paintShapes(substrateShapes, (point) => ({
-    x: width / 2 + point.x * pixelsPerMicrometer,
-    y: height / 2 - point.y * pixelsPerMicrometer,
-  }));
-  return context;
-}
 
 function combinedMask(
   shapes: ReturnType<typeof flattenGds>,
@@ -406,11 +346,21 @@ export default function Home() {
     distance: Math.hypot(measurementEnd.x - measurementStart.x, measurementEnd.y - measurementStart.y)
       * MARS_4_9K.pixelMicrometers / 1000,
   } : null;
+  const previewRasterSize = calculateViewerRasterSize(
+    previewZoom,
+    MARS_4_9K.width,
+    MARS_4_9K.height,
+  );
 
   useEffect(() => {
     if (!preview.current || !repeatedShapes.length) return;
-    drawMask(preview.current, repeatedShapes, settings, 1400, 710, exportedSubstrateShapes);
-  }, [repeatedShapes, settings, exportedSubstrateShapes]);
+    const pixels = combinedMask(repeatedShapes, settings, exportedSubstrateShapes, {
+      width: previewRasterSize.width,
+      height: previewRasterSize.height,
+      pixelMicrometers: MARS_4_9K.pixelMicrometers * MARS_4_9K.width / previewRasterSize.width,
+    });
+    drawBinaryPixels(preview.current, pixels, previewRasterSize.width, previewRasterSize.height);
+  }, [repeatedShapes, settings, exportedSubstrateShapes, previewRasterSize.width, previewRasterSize.height]);
 
   useEffect(() => {
     if (!inspector.current || !repeatedShapes.length) return;
