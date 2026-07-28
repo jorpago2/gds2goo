@@ -1094,7 +1094,7 @@ export default function Home() {
                 <input
                   type="range"
                   min="1"
-                  max="32"
+                  max="64"
                   step="0.5"
                   value={previewZoom}
                   disabled={!visibleShapes.length}
@@ -1109,15 +1109,12 @@ export default function Home() {
                 aria-pressed={isFullscreen}
                 onClick={() => void toggleFullscreen()}
               >{isFullscreen ? "EXIT FULL SCREEN" : "FULL SCREEN"}</button>
-              <label className="grid-control" title="Native 8520 × 4320 LCD pixel grid; enabling it sets zoom to 8×">
+              <label className="grid-control" title="Native 8520 × 4320 LCD pixel grid">
                 <input
                   type="checkbox"
                   checked={showPreviewGrid}
                   disabled={!visibleShapes.length}
-                  onChange={(event) => {
-                    setShowPreviewGrid(event.target.checked);
-                    if (event.target.checked) setPreviewZoom(8);
-                  }}
+                  onChange={(event) => setShowPreviewGrid(event.target.checked)}
                 />
                 <span>PIXEL GRID</span>
               </label>

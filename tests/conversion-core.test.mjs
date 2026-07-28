@@ -279,7 +279,8 @@ test("zooms the viewer smoothly within its physical inspection limits", () => {
   assert.ok(calculateViewerZoom(2, 100) < 2);
   assert.ok(calculateViewerZoom(2, -20, true) > calculateViewerZoom(2, -20));
   assert.ok(calculateViewerZoom(8, -100) > 8);
-  assert.equal(calculateViewerZoom(32, -1000), 32);
+  assert.ok(calculateViewerZoom(32, -100) > 32);
+  assert.equal(calculateViewerZoom(64, -1000), 64);
   assert.equal(calculateViewerZoom(1, 1000, true), 1);
   assert.deepEqual(calculateViewerRasterSize(1, 8520, 4320), { width: 1400, height: 710 });
   assert.deepEqual(calculateViewerRasterSize(2.1, 8520, 4320), { width: 5600, height: 2839 });
