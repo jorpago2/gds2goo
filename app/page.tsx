@@ -17,6 +17,7 @@ import { createRunManifest, parseRunManifest } from "@/lib/manifest.js";
 import { createMonochromePreview, mergeBinaryOverlay, rasterizeBinaryMask } from "@/lib/raster.js";
 import { parseRecipeLibrary, saveRecipeToLibrary } from "@/lib/recipes.js";
 import { createAlignmentMarkShapes, createSubstrateOutlineShape } from "@/lib/substrate.js";
+import { calculateViewerZoom } from "@/lib/viewer.js";
 import { buildZip } from "@/lib/zip.js";
 
 type MaskSettings = {
@@ -250,6 +251,8 @@ export default function Home() {
   const runInput = useRef<HTMLInputElement>(null);
   const preview = useRef<HTMLCanvasElement>(null);
   const inspector = useRef<HTMLCanvasElement>(null);
+  const previewPanel = useRef<HTMLElement>(null);
+  const lcdGrid = useRef<HTMLDivElement>(null);
   const [model, setModel] = useState<ReturnType<typeof parseGds> | null>(null);
   const [fileName, setFileName] = useState("");
   const [topCell, setTopCell] = useState("");
@@ -261,6 +264,7 @@ export default function Home() {
   const [dragging, setDragging] = useState(false);
   const [previewZoom, setPreviewZoom] = useState(1);
   const [showPreviewGrid, setShowPreviewGrid] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [substrateTemplateId, setSubstrateTemplateId] = useState("");
   const [waferMarker, setWaferMarker] = useState<"round" | "flat" | "notch">("round");
   const [includeSubstrateOutline, setIncludeSubstrateOutline] = useState(false);
@@ -296,6 +300,12 @@ export default function Home() {
       setRecipes(parseRecipeLibrary(localStorage.getItem("gds2goo-recipes")) as SavedRecipe[]);
     });
     return () => cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    const updateFullscreenState = () => setIsFullscreen(document.fullscreenElement === previewPanel.current);
+    document.addEventListener("fullscreenchange", updateFullscreenState);
+    return () => document.removeEventListener("fullscreenchange", updateFullscreenState);
   }, []);
 
   const layers = useMemo(() => [...new Set(shapes.map((shape) => shape.layer))].sort((a, b) => a - b), [shapes]);
@@ -420,6 +430,33 @@ export default function Home() {
     context.lineWidth = 0.5;
     context.strokeRect(inspection.x - offsetX + 0.25, inspection.y - offsetY + 0.25, 0.5, 0.5);
   }, [repeatedShapes, settings, inspection, exportedSubstrateShapes]);
+
+  useEffect(() => {
+    const grid = lcdGrid.current;
+    if (!grid) return;
+    const zoomWithWheel = (event: WheelEvent) => {
+      if (!repeatedShapes.length) return;
+      event.preventDefault();
+      const bounds = grid.getBoundingClientRect();
+      const cursorX = event.clientX - bounds.left;
+      const cursorY = event.clientY - bounds.top;
+      const deltaScale = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? grid.clientHeight : 1;
+      const pixelDeltaY = event.deltaY * deltaScale;
+      setPreviewZoom((currentZoom) => {
+        const nextZoom = calculateViewerZoom(currentZoom, pixelDeltaY, event.ctrlKey);
+        if (nextZoom === currentZoom) return currentZoom;
+        requestAnimationFrame(() => {
+          const scale = nextZoom / currentZoom;
+          grid.scrollLeft = (grid.scrollLeft + cursorX) * scale - cursorX;
+          grid.scrollTop = (grid.scrollTop + cursorY) * scale - cursorY;
+        });
+        return nextZoom;
+      });
+    };
+    grid.addEventListener("wheel", zoomWithWheel, { passive: false });
+    return () => grid.removeEventListener("wheel", zoomWithWheel);
+  }, [repeatedShapes.length]);
 
   function inspectPreview(event: ReactMouseEvent<HTMLDivElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -813,6 +850,15 @@ export default function Home() {
     });
   }
 
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await previewPanel.current?.requestFullscreen();
+    } catch {
+      setMessage("Full-screen mode is unavailable in this browser.");
+    }
+  }
+
   return (
     <main>
       <header className="topbar">
@@ -1088,7 +1134,7 @@ export default function Home() {
           </button>
         </aside>
 
-        <section className="preview-panel">
+        <section ref={previewPanel} className="preview-panel">
           <div className="preview-toolbar">
             <div><span className="live-dot" /> LCD PREVIEW</div>
             <div className="preview-tools">
@@ -1106,6 +1152,13 @@ export default function Home() {
                 />
                 <output>{previewZoom.toFixed(1)}×</output>
               </label>
+              <button
+                className="fullscreen-control"
+                type="button"
+                disabled={!visibleShapes.length}
+                aria-pressed={isFullscreen}
+                onClick={() => void toggleFullscreen()}
+              >{isFullscreen ? "EXIT FULL SCREEN" : "FULL SCREEN"}</button>
               <label className="grid-control" title="Native 8520 × 4320 LCD pixel grid; enabling it sets zoom to 8×">
                 <input
                   type="checkbox"
@@ -1198,7 +1251,7 @@ export default function Home() {
             </div>
           )}
           <div className="lcd-shell">
-            <div className="lcd-grid">
+            <div ref={lcdGrid} className="lcd-grid" title="Use the mouse wheel or a trackpad pinch gesture to zoom">
               {visibleShapes.length ? (
                 <div
                   className="preview-surface"

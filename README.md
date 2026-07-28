@@ -8,7 +8,7 @@ Local converter from GDSII layouts to single-layer `.goo` exposure files for the
 
 - Reads `BOUNDARY`, `BOX`, `PATH`, `SREF` and `AREF`, including magnification, rotation and reflection.
 - Preserves the physical GDS units and rasterizes to 8520 × 4320 pixels at 18 µm/pixel using a deterministic pixel-centre rule.
-- Supports layer selection, preview zoom and native-pixel grid, plus a two-point measurement tool.
+- Supports layer selection, slider/wheel/pinch preview zoom, full-screen inspection and a native-pixel grid, plus a two-point measurement tool.
 - Provides independent substrate translation and rotation, configurable edge exclusion, wafer flats/notches, custom circular/rectangular templates, and optional outline rasterization.
 - Generates exportable crosses, corner brackets, targets and a 10 mm ruler for alignment.
 - Creates centred step-and-repeat arrays of up to 10 × 10 copies with independent X/Y pitch.

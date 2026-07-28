@@ -10,6 +10,7 @@ import { createMonochromePreview, mergeBinaryOverlay, rasterizeBinaryMask } from
 import { parseRecipeLibrary, saveRecipeToLibrary } from "../lib/recipes.js";
 import { buildZip } from "../lib/zip.js";
 import { createAlignmentMarkShapes, createSubstrateOutlineShape } from "../lib/substrate.js";
+import { calculateViewerZoom } from "../lib/viewer.js";
 
 function record(type, dataType, payload = []) {
   const length = payload.length + 4;
@@ -271,6 +272,14 @@ test("builds repeat arrays, substrate guides, usable-area checks and local recip
   const recipe = { name: "AZ1505", exposure: 9, calibrationSeries: "7, 9, 11", process: { photoresist: "AZ1505", thicknessNm: "600", softBake: "100 C", development: "45 s", notes: "" } };
   assert.deepEqual(parseRecipeLibrary(JSON.stringify(saveRecipeToLibrary([], recipe))), [recipe]);
   assert.deepEqual(parseRecipeLibrary("not JSON"), []);
+});
+
+test("zooms the viewer smoothly within its physical inspection limits", () => {
+  assert.ok(calculateViewerZoom(2, -100) > 2);
+  assert.ok(calculateViewerZoom(2, 100) < 2);
+  assert.ok(calculateViewerZoom(2, -20, true) > calculateViewerZoom(2, -20));
+  assert.equal(calculateViewerZoom(8, -1000), 8);
+  assert.equal(calculateViewerZoom(1, 1000, true), 1);
 });
 
 test("creates a reproducible run manifest", () => {
