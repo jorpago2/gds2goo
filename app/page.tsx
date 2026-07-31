@@ -1349,7 +1349,7 @@ export default function Home() {
       </section>
 
       <footer>
-        <p>Based on Wu et al., <i>Small Methods</i> 9 (2025), e01336. The optimum dose must be recalibrated for each photoresist, thickness, LCD and development process.</p>
+        <p>Based on <a href="https://doi.org/10.1002/smtd.202501336">Wu et al., <i>Small Methods</i> 9 (2025), e01336</a>. The optimum dose must be recalibrated for each photoresist, thickness, LCD and development process.</p>
         <p><a href="https://jorpago2.github.io/jorpago2/">A tool by Jorge Parra</a><br />405 nm · local-first · experimental use</p>
       </footer>
     </main>
