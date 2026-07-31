@@ -109,6 +109,8 @@ const DEFAULT_RESIST_RESPONSE: ResistResponseProfile = {
   opticalBlurMicrometers: 18,
 };
 
+const PAPER_IRRADIANCE_ESTIMATE_MW_CM2 = 10;
+
 function combinedMask(
   shapes: ReturnType<typeof flattenGds>,
   settings: MaskSettings,
@@ -263,7 +265,8 @@ export default function Home() {
   const [responseThresholdSeconds, setResponseThresholdSeconds] = useState(DEFAULT_RESIST_RESPONSE.thresholdSeconds);
   const [responseContrast, setResponseContrast] = useState(DEFAULT_RESIST_RESPONSE.contrast);
   const [opticalBlurMicrometers, setOpticalBlurMicrometers] = useState(DEFAULT_RESIST_RESPONSE.opticalBlurMicrometers);
-  const [responseIrradianceMwCm2, setResponseIrradianceMwCm2] = useState("");
+  const [responseIrradianceMwCm2, setResponseIrradianceMwCm2] = useState(String(PAPER_IRRADIANCE_ESTIMATE_MW_CM2));
+  const [responseIrradianceIsEstimated, setResponseIrradianceIsEstimated] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [substrateTemplateId, setSubstrateTemplateId] = useState("wafer-2");
   const [waferMarker, setWaferMarker] = useState<"round" | "flat" | "notch">("flat");
@@ -1328,9 +1331,9 @@ export default function Home() {
                   ))}
                 </select>
               </label>
-              <label>Measured irradiance <span>mW/cm²</span>
-                <input type="number" min="0" step="0.1" value={responseIrradianceMwCm2} placeholder="Required for dose → time"
-                  onChange={(event) => setResponseIrradianceMwCm2(event.target.value)} />
+              <label>Irradiance <span>mW/cm² · {responseIrradianceIsEstimated ? "estimated" : "entered"}</span>
+                <input type="number" min="0" step="0.1" value={responseIrradianceMwCm2} placeholder="Enter a measured value"
+                  onChange={(event) => { setResponseIrradianceMwCm2(event.target.value); setResponseIrradianceIsEstimated(false); }} />
               </label>
               <label>Threshold time t₅₀ <span>s</span>
                 <input type="number" min="0.1" max="600" step="0.1" value={responseThresholdSeconds}
@@ -1348,7 +1351,7 @@ export default function Home() {
                 <p><strong>{(calculateResistResponse(1, settings.exposure, responseThresholdSeconds, responseContrast) * 100).toFixed(0)}%</strong> latent response for {photoresistPreset?.name ?? "the generic model"}. {photoresistPreset
                   ? <>{photoresistPreset.documentedContrast ? `Documented γ ${photoresistPreset.documentedContrast}. ` : ""}{referenceDose ? <>Reference dose {referenceDoseText} mJ/cm² ({photoresistPreset.referenceDoseBasis}){referenceTimeText ? ` = ${referenceTimeText} at the entered irradiance` : ""}. </> : "The data sheet provides no transferable 405 nm dose. "}<a href={photoresistPreset.sourceUrl} target="_blank" rel="noreferrer">Manufacturer source</a>. E₀ is not assumed to equal t₅₀.</>
                   : <>Assign a resist, then calibrate t₅₀ and σ from an exposure matrix.</>}</p>
-                <span>{photoresistPreset ? responseProfileIsSaved ? "CALIBRATION SAVED" : savedResponseProfile ? "UNSAVED CHANGES" : photoresistPreset.documentedContrast ? "DOCUMENTED γ · CALIBRATION NEEDED" : "CALIBRATION NEEDED" : "NO RESIST ASSIGNED"}</span>
+                <span>{responseIrradianceIsEstimated ? "10 mW/cm² · ESTIMATED FROM PAPER" : photoresistPreset ? responseProfileIsSaved ? "CALIBRATION SAVED" : savedResponseProfile ? "UNSAVED CHANGES" : photoresistPreset.documentedContrast ? "DOCUMENTED γ · CALIBRATION NEEDED" : "CALIBRATION NEEDED" : "NO RESIST ASSIGNED"}</span>
                 <button type="button" disabled={!photoresistPreset || responseProfileIsSaved} onClick={saveResponseProfile}>Save calibration</button>
               </div>
             </div>
