@@ -9,7 +9,7 @@ import { fitsSubstrateArea, repeatShapes, transformGuideShapes } from "../lib/ex
 import { createRunManifest, parseRunManifest } from "../lib/manifest.js";
 import { createMonochromePreview, mergeBinaryOverlay, rasterizeBinaryMask } from "../lib/raster.js";
 import { parseRecipeLibrary, saveRecipeToLibrary } from "../lib/recipes.js";
-import { PHOTORESISTS_405_NM } from "../lib/photoresists.js";
+import { parsePhotoresistResponseProfiles, PHOTORESISTS_405_NM, savePhotoresistResponseProfile } from "../lib/photoresists.js";
 import { buildZip } from "../lib/zip.js";
 import { createAlignmentMarkShapes, createSubstrateOutlineShape } from "../lib/substrate.js";
 import { calculateResistResponse, calculateViewerRasterSize, calculateViewerZoom } from "../lib/viewer.js";
@@ -316,6 +316,11 @@ test("ships only photoresists with explicit 405 nm compatibility", () => {
   assert.ok(PHOTORESISTS_405_NM.every((preset) => preset.referenceThicknessNm > 0 && preset.referenceRpm > 0));
   assert.ok(PHOTORESISTS_405_NM.every((preset) => preset.sourceUrl.startsWith("https://")));
   assert.ok(!PHOTORESISTS_405_NM.some(({ id }) => id === "su8-2002"));
+  assert.deepEqual(PHOTORESISTS_405_NM.find(({ id }) => id === "mr-p-1201lil").referenceDoseMjCm2, [15, 50]);
+  assert.equal(PHOTORESISTS_405_NM.find(({ id }) => id === "ar-p-3740").documentedContrast, 6);
+  const profiles = savePhotoresistResponseProfile({}, "ar-p-3740", { thresholdSeconds: 12, contrast: 6, opticalBlurMicrometers: 15 });
+  assert.deepEqual(parsePhotoresistResponseProfiles(JSON.stringify(profiles)), profiles);
+  assert.deepEqual(parsePhotoresistResponseProfiles('{"unknown":{"thresholdSeconds":1,"contrast":1,"opticalBlurMicrometers":1}}'), {});
 });
 
 test("creates a reproducible run manifest", () => {

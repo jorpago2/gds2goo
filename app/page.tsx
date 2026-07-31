@@ -12,7 +12,12 @@ import { buildGooFile, encodeBinaryLayer, MARS_4_9K, validateGooFile } from "@/l
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "@/lib/calibration.js";
 import { fitsSubstrateArea, repeatShapes, transformGuideShapes } from "@/lib/experiment.js";
 import { createRunManifest, parseRunManifest } from "@/lib/manifest.js";
-import { PHOTORESIST_MANUFACTURERS_405_NM, PHOTORESISTS_405_NM } from "@/lib/photoresists.js";
+import {
+  parsePhotoresistResponseProfiles,
+  PHOTORESIST_MANUFACTURERS_405_NM,
+  PHOTORESISTS_405_NM,
+  savePhotoresistResponseProfile,
+} from "@/lib/photoresists.js";
 import { createMonochromePreview, mergeBinaryOverlay, rasterizeBinaryMask } from "@/lib/raster.js";
 import { parseRecipeLibrary, saveRecipeToLibrary } from "@/lib/recipes.js";
 import { createAlignmentMarkShapes, createSubstrateOutlineShape } from "@/lib/substrate.js";
@@ -77,6 +82,12 @@ type ProcessMetadata = {
   notes: string;
 };
 
+type ResistResponseProfile = {
+  thresholdSeconds: number;
+  contrast: number;
+  opticalBlurMicrometers: number;
+};
+
 type SourceInfo = {
   kind: "gds" | "generated-calibration" | "generated-diagnostic";
   name: string;
@@ -90,6 +101,12 @@ const DEFAULT_PROCESS: ProcessMetadata = {
   softBake: "",
   development: "",
   notes: "",
+};
+
+const DEFAULT_RESIST_RESPONSE: ResistResponseProfile = {
+  thresholdSeconds: 9,
+  contrast: 4,
+  opticalBlurMicrometers: 18,
 };
 
 function combinedMask(
@@ -243,9 +260,10 @@ export default function Home() {
   const [previewZoom, setPreviewZoom] = useState(1);
   const [showPreviewGrid, setShowPreviewGrid] = useState(false);
   const [showResistResponse, setShowResistResponse] = useState(false);
-  const [responseThresholdSeconds, setResponseThresholdSeconds] = useState(9);
-  const [responseContrast, setResponseContrast] = useState(4);
-  const [opticalBlurMicrometers, setOpticalBlurMicrometers] = useState(18);
+  const [responseThresholdSeconds, setResponseThresholdSeconds] = useState(DEFAULT_RESIST_RESPONSE.thresholdSeconds);
+  const [responseContrast, setResponseContrast] = useState(DEFAULT_RESIST_RESPONSE.contrast);
+  const [opticalBlurMicrometers, setOpticalBlurMicrometers] = useState(DEFAULT_RESIST_RESPONSE.opticalBlurMicrometers);
+  const [responseIrradianceMwCm2, setResponseIrradianceMwCm2] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [substrateTemplateId, setSubstrateTemplateId] = useState("wafer-2");
   const [waferMarker, setWaferMarker] = useState<"round" | "flat" | "notch">("flat");
@@ -275,13 +293,30 @@ export default function Home() {
   const [calibrationSeries, setCalibrationSeries] = useState("5, 7, 9, 11, 13");
   const [processMetadata, setProcessMetadata] = useState(DEFAULT_PROCESS);
   const [photoresistPresetId, setPhotoresistPresetId] = useState("");
+  const [responseProfiles, setResponseProfiles] = useState<Record<string, ResistResponseProfile>>({});
   const [sourceInfo, setSourceInfo] = useState<SourceInfo | null>(null);
   const calibrationMode = sourceInfo?.kind === "generated-calibration";
   const photoresistPreset = PHOTORESISTS_405_NM.find(({ id }) => id === photoresistPresetId);
+  const savedResponseProfile = photoresistPresetId ? responseProfiles[photoresistPresetId] : undefined;
+  const responseIrradiance = Number(responseIrradianceMwCm2);
+  const referenceDose = photoresistPreset?.referenceDoseMjCm2;
+  const referenceDoseText = referenceDose
+    ? referenceDose[0] === referenceDose[1] ? `${referenceDose[0]}` : `${referenceDose[0]}–${referenceDose[1]}`
+    : "";
+  const referenceTimeText = referenceDose && responseIrradiance > 0
+    ? referenceDose[0] === referenceDose[1]
+      ? `${(referenceDose[0] / responseIrradiance).toFixed(1)} s`
+      : `${(referenceDose[0] / responseIrradiance).toFixed(1)}–${(referenceDose[1] / responseIrradiance).toFixed(1)} s`
+    : "";
+  const responseProfileIsSaved = Boolean(savedResponseProfile
+    && savedResponseProfile.thresholdSeconds === responseThresholdSeconds
+    && savedResponseProfile.contrast === responseContrast
+    && savedResponseProfile.opticalBlurMicrometers === opticalBlurMicrometers);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       setRecipes(parseRecipeLibrary(localStorage.getItem("gds2goo-recipes")) as SavedRecipe[]);
+      setResponseProfiles(parsePhotoresistResponseProfiles(localStorage.getItem("gds2goo-resist-response-profiles")) as Record<string, ResistResponseProfile>);
       logoExampleButton.current?.click();
     });
     return () => cancelAnimationFrame(frame);
@@ -593,7 +628,9 @@ export default function Home() {
       setSelectedLayers(restoredLayers);
       setSettings(restored.settings as MaskSettings);
       setProcessMetadata(restored.process);
-      setPhotoresistPresetId(PHOTORESISTS_405_NM.find(({ name }) => name === restored.process.photoresist)?.id ?? "");
+      const restoredPhotoresistId = PHOTORESISTS_405_NM.find(({ name }) => name === restored.process.photoresist)?.id ?? "";
+      setPhotoresistPresetId(restoredPhotoresistId);
+      if (restoredPhotoresistId) applyResponseProfile(restoredPhotoresistId);
       setSubstrateTemplateId(restored.substrateOutline?.templateId ?? "");
       setWaferMarker(restored.substrateOutline?.marker ?? "round");
       setIncludeSubstrateOutline(restored.substrateOutline?.included ?? false);
@@ -669,8 +706,19 @@ export default function Home() {
     setSettings({ ...settings, exposure: recipe.exposure });
     setCalibrationSeries(recipe.calibrationSeries);
     setProcessMetadata(recipe.process);
-    setPhotoresistPresetId(PHOTORESISTS_405_NM.find(({ name }) => name === recipe.process.photoresist)?.id ?? "");
+    const recipePhotoresistId = PHOTORESISTS_405_NM.find(({ name }) => name === recipe.process.photoresist)?.id ?? "";
+    setPhotoresistPresetId(recipePhotoresistId);
+    if (recipePhotoresistId) applyResponseProfile(recipePhotoresistId);
     setMessage(`Process recipe “${recipe.name}” loaded.`);
+  }
+
+  function applyResponseProfile(id: string) {
+    const responseProfile = responseProfiles[id];
+    const preset = PHOTORESISTS_405_NM.find((item) => item.id === id);
+    setResponseThresholdSeconds(responseProfile?.thresholdSeconds ?? DEFAULT_RESIST_RESPONSE.thresholdSeconds);
+    setResponseContrast(responseProfile?.contrast ?? preset?.documentedContrast ?? DEFAULT_RESIST_RESPONSE.contrast);
+    setOpticalBlurMicrometers(responseProfile?.opticalBlurMicrometers ?? DEFAULT_RESIST_RESPONSE.opticalBlurMicrometers);
+    setShowResistResponse(true);
   }
 
   function selectPhotoresistPreset(id: string) {
@@ -678,6 +726,19 @@ export default function Home() {
     const preset = PHOTORESISTS_405_NM.find((item) => item.id === id);
     if (!preset) return;
     setProcessMetadata({ ...processMetadata, photoresist: preset.name, thicknessNm: String(preset.referenceThicknessNm) });
+    applyResponseProfile(id);
+  }
+
+  function saveResponseProfile() {
+    if (!photoresistPreset) return;
+    const nextProfiles = savePhotoresistResponseProfile(responseProfiles, photoresistPreset.id, {
+      thresholdSeconds: responseThresholdSeconds,
+      contrast: responseContrast,
+      opticalBlurMicrometers,
+    }) as Record<string, ResistResponseProfile>;
+    localStorage.setItem("gds2goo-resist-response-profiles", JSON.stringify(nextProfiles));
+    setResponseProfiles(nextProfiles);
+    setMessage(`Response calibration for ${photoresistPreset.name} saved in this browser.`);
   }
 
   function deleteRecipe() {
@@ -1255,6 +1316,22 @@ export default function Home() {
           </div>
           {showResistResponse && visibleShapes.length > 0 && (
             <div className="exposure-controls" aria-label="Resist exposure model">
+              <label>Photoresist <span>405 nm</span>
+                <select value={photoresistPresetId} onChange={(event) => selectPhotoresistPreset(event.target.value)}>
+                  <option value="">Generic / unassigned</option>
+                  {PHOTORESIST_MANUFACTURERS_405_NM.map((manufacturer) => (
+                    <optgroup key={manufacturer} label={manufacturer}>
+                      {PHOTORESISTS_405_NM.filter((preset) => preset.manufacturer === manufacturer).map((preset) => (
+                        <option key={preset.id} value={preset.id}>{preset.name}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
+              <label>Measured irradiance <span>mW/cm²</span>
+                <input type="number" min="0" step="0.1" value={responseIrradianceMwCm2} placeholder="Required for dose → time"
+                  onChange={(event) => setResponseIrradianceMwCm2(event.target.value)} />
+              </label>
               <label>Threshold time t₅₀ <span>s</span>
                 <input type="number" min="0.1" max="600" step="0.1" value={responseThresholdSeconds}
                   onChange={(event) => setResponseThresholdSeconds(boundedNumber(event.target.value, responseThresholdSeconds, 0.1, 600))} />
@@ -1267,7 +1344,13 @@ export default function Home() {
                 <input type="number" min="0.2" max="20" step="0.1" value={responseContrast}
                   onChange={(event) => setResponseContrast(boundedNumber(event.target.value, responseContrast, 0.2, 20))} />
               </label>
-              <p><strong>{(calculateResistResponse(1, settings.exposure, responseThresholdSeconds, responseContrast) * 100).toFixed(0)}%</strong> response at the centre of a large exposed area. Relative preview only: calibrate t₅₀, σ and γ from an exposure matrix and a measured <a href="https://www.microchemicals.com/dokumente/application_notes/exposure_photoresist.pdf" target="_blank" rel="noreferrer">contrast curve</a>.</p>
+              <div className="response-profile-note">
+                <p><strong>{(calculateResistResponse(1, settings.exposure, responseThresholdSeconds, responseContrast) * 100).toFixed(0)}%</strong> latent response for {photoresistPreset?.name ?? "the generic model"}. {photoresistPreset
+                  ? <>{photoresistPreset.documentedContrast ? `Documented γ ${photoresistPreset.documentedContrast}. ` : ""}{referenceDose ? <>Reference dose {referenceDoseText} mJ/cm² ({photoresistPreset.referenceDoseBasis}){referenceTimeText ? ` = ${referenceTimeText} at the entered irradiance` : ""}. </> : "The data sheet provides no transferable 405 nm dose. "}<a href={photoresistPreset.sourceUrl} target="_blank" rel="noreferrer">Manufacturer source</a>. E₀ is not assumed to equal t₅₀.</>
+                  : <>Assign a resist, then calibrate t₅₀ and σ from an exposure matrix.</>}</p>
+                <span>{photoresistPreset ? responseProfileIsSaved ? "CALIBRATION SAVED" : savedResponseProfile ? "UNSAVED CHANGES" : photoresistPreset.documentedContrast ? "DOCUMENTED γ · CALIBRATION NEEDED" : "CALIBRATION NEEDED" : "NO RESIST ASSIGNED"}</span>
+                <button type="button" disabled={!photoresistPreset || responseProfileIsSaved} onClick={saveResponseProfile}>Save calibration</button>
+              </div>
             </div>
           )}
           {substrateTemplate && (
