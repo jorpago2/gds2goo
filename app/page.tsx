@@ -1160,47 +1160,58 @@ export default function Home() {
 
         <section ref={previewPanel} className="preview-panel">
           <div className="preview-toolbar">
-            <div><span className="live-dot" /> LCD PREVIEW</div>
-            <div className="preview-tools">
+            <div className="preview-heading">
+              <div><span className="live-dot" /> LCD PREVIEW</div>
               <p>153.36 × 77.76 mm <b>·</b> 8520 × 4320 px</p>
-              <label className="zoom-control">
-                <span>ZOOM</span>
-                <input
-                  type="range"
-                  min="1"
-                  max="64"
-                  step="0.5"
-                  value={previewZoom}
+            </div>
+            <div className="preview-tools">
+              <div className="zoom-tools" aria-label="Viewer scale">
+                <label className="zoom-control">
+                  <span>ZOOM</span>
+                  <input
+                    type="range"
+                    min="1"
+                    max="64"
+                    step="0.5"
+                    value={previewZoom}
+                    disabled={!visibleShapes.length}
+                    onChange={(event) => setPreviewZoom(Number(event.target.value))}
+                  />
+                  <output>{previewZoom.toFixed(1)}×</output>
+                </label>
+                <button
+                  className="fullscreen-control"
+                  type="button"
                   disabled={!visibleShapes.length}
-                  onChange={(event) => setPreviewZoom(Number(event.target.value))}
-                />
-                <output>{previewZoom.toFixed(1)}×</output>
-              </label>
-              <button
-                className="fullscreen-control"
-                type="button"
-                disabled={!visibleShapes.length}
-                aria-pressed={isFullscreen}
-                onClick={() => void toggleFullscreen()}
-              >{isFullscreen ? "EXIT FULL SCREEN" : "FULL SCREEN"}</button>
-              <label className="grid-control" title="Native 8520 × 4320 LCD pixel grid">
-                <input
-                  type="checkbox"
-                  checked={showPreviewGrid}
-                  disabled={!visibleShapes.length}
-                  onChange={(event) => setShowPreviewGrid(event.target.checked)}
-                />
-                <span>PIXEL GRID</span>
-              </label>
-              <label className="grid-control" title="Relative latent-image response versus exposure time">
-                <input
-                  type="checkbox"
-                  checked={showResistResponse}
-                  disabled={!visibleShapes.length}
-                  onChange={(event) => setShowResistResponse(event.target.checked)}
-                />
-                <span>RESIST RESPONSE</span>
-              </label>
+                  aria-pressed={isFullscreen}
+                  onClick={() => void toggleFullscreen()}
+                >{isFullscreen ? "EXIT FULL SCREEN" : "FULL SCREEN"}</button>
+              </div>
+              <div className="preview-mode-tools" aria-label="Viewer overlays">
+                <label className="grid-control" title="Native 8520 × 4320 LCD pixel grid">
+                  <input
+                    type="checkbox"
+                    checked={showPreviewGrid}
+                    disabled={!visibleShapes.length}
+                    onChange={(event) => setShowPreviewGrid(event.target.checked)}
+                  />
+                  <span>PIXEL GRID</span>
+                </label>
+                <label className="grid-control" title="Relative latent-image response versus exposure time">
+                  <input
+                    type="checkbox"
+                    checked={showResistResponse}
+                    disabled={!visibleShapes.length}
+                    onChange={(event) => setShowResistResponse(event.target.checked)}
+                  />
+                  <span>RESIST RESPONSE</span>
+                </label>
+                <label className="grid-control" title="Measure between two clicks on the LCD preview">
+                  <input type="checkbox" checked={measureMode} disabled={!repeatedShapes.length}
+                    onChange={(event) => { setMeasureMode(event.target.checked); setMeasurementStart(null); setMeasurementEnd(null); }} />
+                  <span>MEASURE</span>
+                </label>
+              </div>
               <label className="template-control" title="Centred physical substrate outline">
                 <span>SUBSTRATE OUTLINE</span>
                 <select value={substrateTemplateId} onChange={(event) => setSubstrateTemplateId(event.target.value)}>
@@ -1209,11 +1220,6 @@ export default function Home() {
                     <option key={template.id} value={template.id}>{template.label}</option>
                   ))}
                 </select>
-              </label>
-              <label className="grid-control" title="Measure between two clicks on the LCD preview">
-                <input type="checkbox" checked={measureMode} disabled={!repeatedShapes.length}
-                  onChange={(event) => { setMeasureMode(event.target.checked); setMeasurementStart(null); setMeasurementEnd(null); }} />
-                <span>MEASURE</span>
               </label>
             </div>
           </div>
@@ -1236,6 +1242,8 @@ export default function Home() {
           )}
           {substrateTemplate && (
             <div className="substrate-controls" aria-label="Substrate configuration">
+              <fieldset className="substrate-group substrate-geometry">
+                <legend>Wafer geometry</legend>
               {substrateTemplateId.startsWith("custom-") && (
                 <>
                   <label>{substrateTemplate.shape === "circle" ? "Diameter" : "Width"} <span>mm</span>
@@ -1275,6 +1283,9 @@ export default function Home() {
                 <input type="number" min="0" max="20" step="0.1" value={edgeExclusion}
                   onChange={(event) => setEdgeExclusion(boundedNumber(event.target.value, edgeExclusion, 0, 20))} />
               </label>
+              </fieldset>
+              <fieldset className="substrate-group substrate-output">
+                <legend>Alignment &amp; mask</legend>
               <label>Alignment marks
                 <select value={alignmentStyle} onChange={(event) => setAlignmentStyle(event.target.value as typeof alignmentStyle)}>
                   <option value="none">None</option><option value="crosses">Crosses</option><option value="corners">Corner brackets</option>
@@ -1294,6 +1305,7 @@ export default function Home() {
                   disabled={!includeSubstrateOutline && alignmentStyle === "none"}
                   onChange={(event) => { const value = Number(event.target.value); if (value >= 36 && value <= 1000) setSubstrateLineWidth(value); }} />
               </label>
+              </fieldset>
               <p className="substrate-note">Alignment marks are exported when selected. The dashed inner guide is the usable area and is never exported.</p>
             </div>
           )}
