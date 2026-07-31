@@ -225,6 +225,7 @@ function boundedNumber(value: string, current: number, minimum: number, maximum:
 export default function Home() {
   const fileInput = useRef<HTMLInputElement>(null);
   const runInput = useRef<HTMLInputElement>(null);
+  const logoExampleButton = useRef<HTMLButtonElement>(null);
   const preview = useRef<HTMLCanvasElement>(null);
   const inspector = useRef<HTMLCanvasElement>(null);
   const previewPanel = useRef<HTMLElement>(null);
@@ -245,8 +246,8 @@ export default function Home() {
   const [responseContrast, setResponseContrast] = useState(4);
   const [opticalBlurMicrometers, setOpticalBlurMicrometers] = useState(18);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [substrateTemplateId, setSubstrateTemplateId] = useState("");
-  const [waferMarker, setWaferMarker] = useState<"round" | "flat" | "notch">("round");
+  const [substrateTemplateId, setSubstrateTemplateId] = useState("wafer-2");
+  const [waferMarker, setWaferMarker] = useState<"round" | "flat" | "notch">("flat");
   const [includeSubstrateOutline, setIncludeSubstrateOutline] = useState(false);
   const [substrateLineWidth, setSubstrateLineWidth] = useState(180);
   const [substrateOffsetX, setSubstrateOffsetX] = useState(0);
@@ -256,7 +257,7 @@ export default function Home() {
   const [customWidth, setCustomWidth] = useState(50);
   const [customHeight, setCustomHeight] = useState(25);
   const [customFlatLength, setCustomFlatLength] = useState(15);
-  const [alignmentStyle, setAlignmentStyle] = useState<"none" | "crosses" | "corners" | "targets" | "ruler" | "full">("none");
+  const [alignmentStyle, setAlignmentStyle] = useState<"none" | "crosses" | "corners" | "targets" | "ruler" | "full">("crosses");
   const [alignmentSize, setAlignmentSize] = useState(3);
   const [repeatRows, setRepeatRows] = useState(1);
   const [repeatColumns, setRepeatColumns] = useState(1);
@@ -278,6 +279,7 @@ export default function Home() {
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       setRecipes(parseRecipeLibrary(localStorage.getItem("gds2goo-recipes")) as SavedRecipe[]);
+      logoExampleButton.current?.click();
     });
     return () => cancelAnimationFrame(frame);
   }, []);
@@ -939,7 +941,7 @@ export default function Home() {
           <div className="source-actions">
             <button type="button" disabled={busy} onClick={loadCalibrationPattern}>18–180 µm calibration pattern</button>
             <button type="button" disabled={busy} onClick={loadOrientationPattern}>Printer orientation check</button>
-            <button type="button" disabled={busy} title="120.0 × 40.2 mm · layer 1 · 66.7 µm source grid" onClick={() => void loadLogoExample()}>UV logo GDS example</button>
+            <button ref={logoExampleButton} type="button" disabled={busy} title="43.0 × 14.4 mm · layer 1 · 23.9 µm source grid" onClick={() => void loadLogoExample()}>UV logo GDS example</button>
             <button type="button" disabled={busy} onClick={() => runInput.current?.click()}>Restore .run.json</button>
             <input ref={runInput} type="file" accept=".json,application/json" onChange={(event) => void restoreRun(event.target.files?.[0])} />
           </div>

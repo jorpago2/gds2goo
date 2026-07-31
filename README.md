@@ -18,7 +18,7 @@ Local converter from GDSII layouts to single-layer `.goo` exposure files for the
 - Previews a calibratable, time-dependent latent resist response using optical blur and a contrast curve.
 - Generates a built-in 18–180 µm line/space calibration mask and exposure-time series.
 - Generates an asymmetric LCD diagnostic for orientation, polarity, clipping and a 10.008 mm scale check.
-- Includes a 120.0 × 40.2 mm Universitat de València logo example as a real, single-layer GDSII file.
+- Opens with a 43.0 × 14.4 mm Universitat de València logo GDS on a 2-inch wafer with a primary flat and cross alignment marks.
 - Reports exposure-relevant GDS compatibility warnings instead of silently omitting unsupported geometry.
 - Exports GOO V3.0 with RLE and checksum, plus a 9K verification PNG.
 - Exports a companion `.run.json` manifest with the GDS SHA-256, mask settings and optional process metadata.
