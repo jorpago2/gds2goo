@@ -827,7 +827,7 @@ export default function Home() {
     try {
       setBusy(true);
       setMessage("Loading the Universitat de València logo GDS…");
-      const response = await fetch("./examples/universitat-valencia-logo.gds");
+      const response = await fetch("./examples/universitat-valencia-logo.gds?v=2inch-40mm");
       if (!response.ok) throw new Error(`The example GDS could not be loaded (${response.status}).`);
       await loadFile(new File(
         [await response.blob()],
@@ -941,7 +941,7 @@ export default function Home() {
           <div className="source-actions">
             <button type="button" disabled={busy} onClick={loadCalibrationPattern}>18–180 µm calibration pattern</button>
             <button type="button" disabled={busy} onClick={loadOrientationPattern}>Printer orientation check</button>
-            <button ref={logoExampleButton} type="button" disabled={busy} title="43.0 × 14.4 mm · layer 1 · 23.9 µm source grid" onClick={() => void loadLogoExample()}>UV logo GDS example</button>
+            <button ref={logoExampleButton} type="button" disabled={busy} title="40.0 × 13.4 mm · layer 1 · 22.2 µm source grid" onClick={() => void loadLogoExample()}>UV logo GDS example</button>
             <button type="button" disabled={busy} onClick={() => runInput.current?.click()}>Restore .run.json</button>
             <input ref={runInput} type="file" accept=".json,application/json" onChange={(event) => void restoreRun(event.target.files?.[0])} />
           </div>

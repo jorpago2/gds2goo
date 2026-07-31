@@ -284,8 +284,8 @@ test("ships a physically scaled Universitat de València logo GDS", async () => 
   assert.deepEqual(model.topCells, ["UV_LOGO"]);
   assert.equal(model.compatibility.warnings.length, 0);
   assert.equal(shapes.length, 7649);
-  assert.ok(Math.abs(bounds.width - 43000) < 0.001);
-  assert.ok(Math.abs(bounds.height - 14405) < 0.001);
+  assert.ok(Math.abs(bounds.width - 40000) < 0.001);
+  assert.ok(Math.abs(bounds.height - 13400) < 0.001);
 });
 
 test("zooms the viewer smoothly within its physical inspection limits", () => {
