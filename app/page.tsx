@@ -823,9 +823,12 @@ export default function Home() {
       <section className="hero" id="top">
         <div>
           <p className="eyebrow">MASKLESS PHOTOLITHOGRAPHY TOOL</p>
-          <h1>From GDS layout to the <em>UV display.</em></h1>
+          <h1><span>From GDS layout</span><em>to the UV display.</em></h1>
         </div>
-        <p className="hero-copy">Rasterize physical geometries at native pixel resolution and generate a single-layer <code>.goo</code> exposure for the Mars 4 9K.</p>
+        <div className="hero-summary">
+          <p className="hero-flow">GDSII <span>→</span> NATIVE RASTER <span>→</span> GOO V3.0</p>
+          <p className="hero-copy">Rasterize physical geometries at native pixel resolution and generate a single-layer <code>.goo</code> exposure for the Mars 4 9K.</p>
+        </div>
       </section>
 
       <details className="quick-guide">

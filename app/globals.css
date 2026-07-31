@@ -24,12 +24,16 @@ button { color: inherit; }
 .device-pill span, .live-dot { width: 7px; height: 7px; display: inline-block; border-radius: 50%; background: #46c75b; margin-right: 6px; box-shadow: 0 0 0 3px rgba(70,199,91,.14); }
 .topbar > p { color: var(--muted); font-size: 12px; }
 
-.hero { padding: 32px 4vw 30px; display: grid; gap: 14px; border-bottom: 1px solid var(--line); }
+.hero { padding: 44px 4vw 48px; display: grid; grid-template-columns: minmax(430px, 760px) minmax(320px, 500px); justify-content: space-between; gap: clamp(48px, 8vw, 150px); align-items: center; border-bottom: 1px solid var(--line); }
 .eyebrow { margin: 0 0 13px; font: 700 11px/1 var(--font-geist-mono), monospace; letter-spacing: .13em; color: var(--orange); }
-.hero h1 { margin: 0; font-size: clamp(40px, 4.3vw, 60px); line-height: .95; letter-spacing: -.065em; font-weight: 850; }
+.hero h1 { margin: 0; font-size: clamp(52px, 4.6vw, 84px); line-height: .86; letter-spacing: -.075em; font-weight: 850; }
+.hero h1 span, .hero h1 em { display: block; }
 .hero h1 em { color: var(--orange); font-style: normal; }
-.hero-copy { max-width: 720px; margin: 0; font-size: 16px; line-height: 1.55; color: #4d4941; }
+.hero-summary { max-width: 500px; padding: 22px 0 22px 24px; border-left: 3px solid var(--orange); }
+.hero-copy { margin: 0; font-size: 14px; line-height: 1.65; color: #4d4941; }
 .hero-copy code { color: var(--ink); background: #dfdbcf; padding: 2px 5px; border-radius: 3px; }
+.hero-flow { margin: 0 0 12px; color: var(--ink); font: 800 10px/1 var(--font-geist-mono), monospace; letter-spacing: .11em; }
+.hero-flow span { padding: 0 8px; color: var(--orange); }
 
 .quick-guide { border-bottom: 1px solid var(--line); background: #ebe7dc; }
 .quick-guide summary { min-height: 54px; padding: 13px 4vw; display: flex; justify-content: space-between; align-items: center; gap: 20px; cursor: pointer; list-style: none; }
@@ -223,7 +227,9 @@ footer a { color: var(--ink); font-weight: 700; text-underline-offset: 3px; }
 
 @media (max-width: 900px) {
   .topbar > p { display: none; }
-  .workspace { grid-template-columns: 1fr; }
+  .hero, .workspace { grid-template-columns: 1fr; }
+  .hero { gap: 28px; }
+  .hero-summary { max-width: 620px; }
   .controls { border-right: 0; border-bottom: 1px solid var(--line); padding-right: 4vw; }
   .preview-panel { padding-left: 4vw; }
   .guide-body ol { grid-template-columns: 1fr 1fr; }
@@ -236,8 +242,11 @@ footer a { color: var(--ink); font-weight: 700; text-underline-offset: 3px; }
 @media (max-width: 560px) {
   .topbar { padding: 0 20px; }.device-pill { font-size: 8px; }
   .hero, .controls, .preview-panel { padding-left: 20px; padding-right: 20px; }
-  .hero { padding-top: 24px; padding-bottom: 24px; }
-  .hero h1 { font-size: 32px; }
+  .hero { padding-top: 32px; padding-bottom: 34px; }
+  .hero h1 { font-size: 36px; }
+  .hero-summary { padding: 15px 0 15px 18px; }
+  .hero-flow { font-size: 9px; letter-spacing: .07em; white-space: nowrap; }
+  .hero-flow span { padding: 0 4px; }
   .source-actions { grid-template-columns: 1fr; }
   .source-actions button:last-of-type { grid-column: auto; }
   .quick-guide summary, .guide-body { padding-left: 20px; padding-right: 20px; }
