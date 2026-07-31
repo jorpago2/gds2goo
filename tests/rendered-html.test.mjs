@@ -5,6 +5,7 @@ import test from "node:test";
 test("exports the GDS2GOO application shell", async () => {
   const html = await readFile(new URL("../out/index.html", import.meta.url), "utf8");
   assert.match(html, /<title>GDS2GOO/);
+  assert.match(html, /favicon\.svg/);
   assert.match(html, /From GDS layout/);
   assert.match(html, /to the UV display/);
   assert.match(html, /NATIVE RASTER/);
