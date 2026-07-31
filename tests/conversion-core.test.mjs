@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { fitsDisplay, flattenGds, parseGds, placedBoundsOf } from "../lib/gds.js";
+import { boundsOf, fitsDisplay, flattenGds, parseGds, placedBoundsOf } from "../lib/gds.js";
 import { buildGooFile, encodeBinaryLayer, validateGooFile } from "../lib/goo.js";
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "../lib/calibration.js";
 import { fitsSubstrateArea, repeatShapes, transformGuideShapes } from "../lib/experiment.js";
@@ -10,7 +11,7 @@ import { createMonochromePreview, mergeBinaryOverlay, rasterizeBinaryMask } from
 import { parseRecipeLibrary, saveRecipeToLibrary } from "../lib/recipes.js";
 import { buildZip } from "../lib/zip.js";
 import { createAlignmentMarkShapes, createSubstrateOutlineShape } from "../lib/substrate.js";
-import { calculateViewerRasterSize, calculateViewerZoom } from "../lib/viewer.js";
+import { calculateResistResponse, calculateViewerRasterSize, calculateViewerZoom } from "../lib/viewer.js";
 
 function record(type, dataType, payload = []) {
   const length = payload.length + 4;
@@ -274,6 +275,19 @@ test("builds repeat arrays, substrate guides, usable-area checks and local recip
   assert.deepEqual(parseRecipeLibrary("not JSON"), []);
 });
 
+test("ships a physically scaled Universitat de València logo GDS", async () => {
+  const bytes = await readFile(new URL("../public/examples/universitat-valencia-logo.gds", import.meta.url));
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  const model = parseGds(buffer);
+  const shapes = flattenGds(model, "UV_LOGO");
+  const bounds = boundsOf(shapes);
+  assert.deepEqual(model.topCells, ["UV_LOGO"]);
+  assert.equal(model.compatibility.warnings.length, 0);
+  assert.equal(shapes.length, 7649);
+  assert.ok(Math.abs(bounds.width - 119998.8) < 0.001);
+  assert.ok(Math.abs(bounds.height - 40199.598) < 0.001);
+});
+
 test("zooms the viewer smoothly within its physical inspection limits", () => {
   assert.ok(calculateViewerZoom(2, -100) > 2);
   assert.ok(calculateViewerZoom(2, 100) < 2);
@@ -285,6 +299,13 @@ test("zooms the viewer smoothly within its physical inspection limits", () => {
   assert.deepEqual(calculateViewerRasterSize(1, 8520, 4320), { width: 1400, height: 710 });
   assert.deepEqual(calculateViewerRasterSize(2.1, 8520, 4320), { width: 5600, height: 2839 });
   assert.deepEqual(calculateViewerRasterSize(8, 8520, 4320), { width: 8520, height: 4320 });
+});
+
+test("maps exposure time and aerial intensity to a bounded resist response", () => {
+  assert.equal(calculateResistResponse(0, 9, 9, 4), 0);
+  assert.equal(calculateResistResponse(1, 9, 9, 4), 0.5);
+  assert.ok(calculateResistResponse(1, 18, 9, 4) > calculateResistResponse(1, 4.5, 9, 4));
+  assert.throws(() => calculateResistResponse(1.1, 9, 9, 4), /physical model bounds/);
 });
 
 test("creates a reproducible run manifest", () => {

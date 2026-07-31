@@ -15,7 +15,7 @@ import { createRunManifest, parseRunManifest } from "@/lib/manifest.js";
 import { createMonochromePreview, mergeBinaryOverlay, rasterizeBinaryMask } from "@/lib/raster.js";
 import { parseRecipeLibrary, saveRecipeToLibrary } from "@/lib/recipes.js";
 import { createAlignmentMarkShapes, createSubstrateOutlineShape } from "@/lib/substrate.js";
-import { calculateViewerRasterSize, calculateViewerZoom } from "@/lib/viewer.js";
+import { calculateResistResponse, calculateViewerRasterSize, calculateViewerZoom } from "@/lib/viewer.js";
 import { buildZip } from "@/lib/zip.js";
 
 type MaskSettings = {
@@ -153,6 +153,42 @@ function drawBinaryPixels(canvas: HTMLCanvasElement, pixels: Uint8Array, width: 
   return context;
 }
 
+function drawResistResponse(
+  canvas: HTMLCanvasElement,
+  pixels: Uint8Array,
+  width: number,
+  height: number,
+  exposureSeconds: number,
+  thresholdSeconds: number,
+  contrast: number,
+  blurPixels: number,
+) {
+  const source = document.createElement("canvas");
+  drawBinaryPixels(source, pixels, width, height);
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { alpha: false });
+  if (!context) throw new Error("The browser could not create the resist preview canvas.");
+  context.fillStyle = "#050807";
+  context.fillRect(0, 0, width, height);
+  context.filter = blurPixels > 0 ? `blur(${blurPixels}px)` : "none";
+  context.drawImage(source, 0, 0);
+  context.filter = "none";
+  const image = context.getImageData(0, 0, width, height);
+  for (let index = 0; index < pixels.length; index += 1) {
+    const response = calculateResistResponse(image.data[index * 4] / 255, exposureSeconds, thresholdSeconds, contrast);
+    const mix = response < 0.5 ? response * 2 : (response - 0.5) * 2;
+    const start = response < 0.5 ? [5, 8, 7] : [255, 90, 31];
+    const end = response < 0.5 ? [255, 90, 31] : [217, 255, 67];
+    image.data[index * 4] = Math.round(start[0] + (end[0] - start[0]) * mix);
+    image.data[index * 4 + 1] = Math.round(start[1] + (end[1] - start[1]) * mix);
+    image.data[index * 4 + 2] = Math.round(start[2] + (end[2] - start[2]) * mix);
+  }
+  context.putImageData(image, 0, 0);
+  source.width = 1;
+  source.height = 1;
+}
+
 function saveFile(bytes: BlobPart, name: string, type: string) {
   const url = URL.createObjectURL(new Blob([bytes], { type }));
   const link = document.createElement("a");
@@ -204,6 +240,10 @@ export default function Home() {
   const [dragging, setDragging] = useState(false);
   const [previewZoom, setPreviewZoom] = useState(1);
   const [showPreviewGrid, setShowPreviewGrid] = useState(false);
+  const [showResistResponse, setShowResistResponse] = useState(false);
+  const [responseThresholdSeconds, setResponseThresholdSeconds] = useState(9);
+  const [responseContrast, setResponseContrast] = useState(4);
+  const [opticalBlurMicrometers, setOpticalBlurMicrometers] = useState(18);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [substrateTemplateId, setSubstrateTemplateId] = useState("");
   const [waferMarker, setWaferMarker] = useState<"round" | "flat" | "notch">("round");
@@ -359,8 +399,19 @@ export default function Home() {
       height: previewRasterSize.height,
       pixelMicrometers: MARS_4_9K.pixelMicrometers * MARS_4_9K.width / previewRasterSize.width,
     });
-    drawBinaryPixels(preview.current, pixels, previewRasterSize.width, previewRasterSize.height);
-  }, [repeatedShapes, settings, exportedSubstrateShapes, previewRasterSize.width, previewRasterSize.height]);
+    if (showResistResponse) {
+      drawResistResponse(
+        preview.current,
+        pixels,
+        previewRasterSize.width,
+        previewRasterSize.height,
+        settings.exposure,
+        responseThresholdSeconds,
+        responseContrast,
+        opticalBlurMicrometers / (MARS_4_9K.pixelMicrometers * MARS_4_9K.width / previewRasterSize.width),
+      );
+    } else drawBinaryPixels(preview.current, pixels, previewRasterSize.width, previewRasterSize.height);
+  }, [repeatedShapes, settings, exportedSubstrateShapes, previewRasterSize.width, previewRasterSize.height, showResistResponse, responseThresholdSeconds, responseContrast, opticalBlurMicrometers]);
 
   useEffect(() => {
     if (!inspector.current || !repeatedShapes.length) return;
@@ -770,6 +821,23 @@ export default function Home() {
     );
   }
 
+  async function loadLogoExample() {
+    try {
+      setBusy(true);
+      setMessage("Loading the Universitat de València logo GDS…");
+      const response = await fetch("./examples/universitat-valencia-logo.gds");
+      if (!response.ok) throw new Error(`The example GDS could not be loaded (${response.status}).`);
+      await loadFile(new File(
+        [await response.blob()],
+        "universitat-valencia-logo.gds",
+        { type: "application/octet-stream" },
+      ));
+    } catch (error) {
+      setBusy(false);
+      setMessage(error instanceof Error ? error.message : "The example GDS could not be loaded.");
+    }
+  }
+
   async function exportBundle() {
     if (!visibleShapes.length || outsideScreen) return;
     await runExport("Building reproducible experiment package…", "The experiment package could not be generated.", async () => {
@@ -871,6 +939,7 @@ export default function Home() {
           <div className="source-actions">
             <button type="button" disabled={busy} onClick={loadCalibrationPattern}>18–180 µm calibration pattern</button>
             <button type="button" disabled={busy} onClick={loadOrientationPattern}>Printer orientation check</button>
+            <button type="button" disabled={busy} title="120.0 × 40.2 mm · layer 1 · 66.7 µm source grid" onClick={() => void loadLogoExample()}>UV logo GDS example</button>
             <button type="button" disabled={busy} onClick={() => runInput.current?.click()}>Restore .run.json</button>
             <input ref={runInput} type="file" accept=".json,application/json" onChange={(event) => void restoreRun(event.target.files?.[0])} />
           </div>
@@ -947,7 +1016,7 @@ export default function Home() {
           <div className="settings-grid">
             <label>Exposure <span>s</span>
               <input type="number" min="0.1" max="600" step="0.1" value={settings.exposure}
-                onChange={(event) => setSettings({ ...settings, exposure: Number(event.target.value) })} />
+                onChange={(event) => setSettings({ ...settings, exposure: boundedNumber(event.target.value, settings.exposure, 0.1, 600) })} />
             </label>
             <label>Rotation
               <select value={settings.rotation} onChange={(event) => setSettings({ ...settings, rotation: Number(event.target.value) })}>
@@ -1121,6 +1190,15 @@ export default function Home() {
                 />
                 <span>PIXEL GRID</span>
               </label>
+              <label className="grid-control" title="Relative latent-image response versus exposure time">
+                <input
+                  type="checkbox"
+                  checked={showResistResponse}
+                  disabled={!visibleShapes.length}
+                  onChange={(event) => setShowResistResponse(event.target.checked)}
+                />
+                <span>RESIST RESPONSE</span>
+              </label>
               <label className="template-control" title="Centred physical substrate outline">
                 <span>SUBSTRATE OUTLINE</span>
                 <select value={substrateTemplateId} onChange={(event) => setSubstrateTemplateId(event.target.value)}>
@@ -1137,6 +1215,23 @@ export default function Home() {
               </label>
             </div>
           </div>
+          {showResistResponse && visibleShapes.length > 0 && (
+            <div className="exposure-controls" aria-label="Resist exposure model">
+              <label>Threshold time t₅₀ <span>s</span>
+                <input type="number" min="0.1" max="600" step="0.1" value={responseThresholdSeconds}
+                  onChange={(event) => setResponseThresholdSeconds(boundedNumber(event.target.value, responseThresholdSeconds, 0.1, 600))} />
+              </label>
+              <label>Optical blur σ <span>µm</span>
+                <input type="number" min="0" max="1000" step="1" value={opticalBlurMicrometers}
+                  onChange={(event) => setOpticalBlurMicrometers(boundedNumber(event.target.value, opticalBlurMicrometers, 0, 1000))} />
+              </label>
+              <label>Response steepness γ <span>0.2–20</span>
+                <input type="number" min="0.2" max="20" step="0.1" value={responseContrast}
+                  onChange={(event) => setResponseContrast(boundedNumber(event.target.value, responseContrast, 0.2, 20))} />
+              </label>
+              <p><strong>{(calculateResistResponse(1, settings.exposure, responseThresholdSeconds, responseContrast) * 100).toFixed(0)}%</strong> response at the centre of a large exposed area. Relative preview only: calibrate t₅₀, σ and γ from an exposure matrix and a measured <a href="https://www.microchemicals.com/dokumente/application_notes/exposure_photoresist.pdf" target="_blank" rel="noreferrer">contrast curve</a>.</p>
+            </div>
+          )}
           {substrateTemplate && (
             <div className="substrate-controls" aria-label="Substrate configuration">
               {substrateTemplateId.startsWith("custom-") && (
@@ -1208,7 +1303,7 @@ export default function Home() {
                   style={{ width: `${previewZoom * 100}%`, height: `${previewZoom * 100}%` }}
                   onClick={inspectPreview}
                 >
-                  <canvas ref={preview} aria-label="LCD mask preview" />
+                  <canvas ref={preview} aria-label={showResistResponse ? "Relative photoresist response preview" : "LCD mask preview"} />
                   {substrateTemplate && (
                     <div className="substrate-template" aria-hidden="true">
                       <svg viewBox={`0 0 ${MARS_4_9K.sizeX} ${MARS_4_9K.sizeY}`} preserveAspectRatio="none">
@@ -1273,6 +1368,7 @@ export default function Home() {
               )}
             </div>
             <div className="screen-axis"><span>0, 0</span><span>X · 153.36 mm</span></div>
+            {showResistResponse && <div className="exposure-legend"><span>0% · unexposed</span><i /><span>50% · t₅₀</span><i /><span>100% · saturated</span></div>}
             {measureMode && (
               <p className="measurement-readout">{measurement
                 ? `MEASURE · ΔX ${measurement.deltaX.toFixed(3)} mm · ΔY ${measurement.deltaY.toFixed(3)} mm · DISTANCE ${measurement.distance.toFixed(3)} mm`
