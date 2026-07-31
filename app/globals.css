@@ -116,6 +116,7 @@ legend { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-sp
 .process-metadata { margin: 14px 0; border: 1px solid var(--line); background: #f1eee6; padding: 11px; }
 .process-metadata summary { cursor: pointer; font: 800 10px/1 var(--font-geist-mono), monospace; letter-spacing: .08em; text-transform: uppercase; }
 .process-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 13px; }
+.process-grid .full-width, .photoresist-reference { grid-column: 1 / -1; }
 .process-metadata label { display: block; font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
 .process-metadata label > span { color: var(--muted); float: right; font-weight: 500; text-transform: none; }
 .process-metadata input, .process-metadata textarea { width: 100%; margin-top: 5px; border: 1px solid #bdb7aa; background: white; padding: 8px 9px; font-size: 11px; }
@@ -123,6 +124,9 @@ legend { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-sp
 .process-metadata > label { margin-top: 10px; }
 .process-metadata p { margin: 8px 0 0; color: var(--muted); font-size: 9px; }
 .process-metadata code { color: var(--ink); }
+.photoresist-reference { display: grid; gap: 4px; padding: 10px; border-left: 3px solid var(--orange); background: #fff3e9; color: var(--muted); font: 500 9px/1.4 var(--font-geist-mono), monospace; }
+.photoresist-reference strong { color: var(--ink); font-size: 10px; }
+.photoresist-reference a { width: max-content; color: var(--ink); font-weight: 800; text-underline-offset: 3px; }
 .process-metadata button { min-height: 34px; margin-top: 9px; border: 1px solid var(--ink); background: white; color: var(--ink); cursor: pointer; font-weight: 750; }
 .process-metadata button:disabled { opacity: .38; cursor: not-allowed; }
 .layer-exposure-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; margin-top: 12px; }

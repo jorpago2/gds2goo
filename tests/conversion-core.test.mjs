@@ -9,6 +9,7 @@ import { fitsSubstrateArea, repeatShapes, transformGuideShapes } from "../lib/ex
 import { createRunManifest, parseRunManifest } from "../lib/manifest.js";
 import { createMonochromePreview, mergeBinaryOverlay, rasterizeBinaryMask } from "../lib/raster.js";
 import { parseRecipeLibrary, saveRecipeToLibrary } from "../lib/recipes.js";
+import { PHOTORESISTS_405_NM } from "../lib/photoresists.js";
 import { buildZip } from "../lib/zip.js";
 import { createAlignmentMarkShapes, createSubstrateOutlineShape } from "../lib/substrate.js";
 import { calculateResistResponse, calculateViewerRasterSize, calculateViewerZoom } from "../lib/viewer.js";
@@ -306,6 +307,15 @@ test("maps exposure time and aerial intensity to a bounded resist response", () 
   assert.equal(calculateResistResponse(1, 9, 9, 4), 0.5);
   assert.ok(calculateResistResponse(1, 18, 9, 4) > calculateResistResponse(1, 4.5, 9, 4));
   assert.throws(() => calculateResistResponse(1.1, 9, 9, 4), /physical model bounds/);
+});
+
+test("ships only photoresists with explicit 405 nm compatibility", () => {
+  assert.equal(PHOTORESISTS_405_NM.length, 26);
+  assert.equal(new Set(PHOTORESISTS_405_NM.map(({ id }) => id)).size, PHOTORESISTS_405_NM.length);
+  assert.ok(PHOTORESISTS_405_NM.every((preset) => preset.exposureWavelengthsNm.includes(405)));
+  assert.ok(PHOTORESISTS_405_NM.every((preset) => preset.referenceThicknessNm > 0 && preset.referenceRpm > 0));
+  assert.ok(PHOTORESISTS_405_NM.every((preset) => preset.sourceUrl.startsWith("https://")));
+  assert.ok(!PHOTORESISTS_405_NM.some(({ id }) => id === "su8-2002"));
 });
 
 test("creates a reproducible run manifest", () => {

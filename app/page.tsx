@@ -12,6 +12,7 @@ import { buildGooFile, encodeBinaryLayer, MARS_4_9K, validateGooFile } from "@/l
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "@/lib/calibration.js";
 import { fitsSubstrateArea, repeatShapes, transformGuideShapes } from "@/lib/experiment.js";
 import { createRunManifest, parseRunManifest } from "@/lib/manifest.js";
+import { PHOTORESIST_MANUFACTURERS_405_NM, PHOTORESISTS_405_NM } from "@/lib/photoresists.js";
 import { createMonochromePreview, mergeBinaryOverlay, rasterizeBinaryMask } from "@/lib/raster.js";
 import { parseRecipeLibrary, saveRecipeToLibrary } from "@/lib/recipes.js";
 import { createAlignmentMarkShapes, createSubstrateOutlineShape } from "@/lib/substrate.js";
@@ -273,8 +274,10 @@ export default function Home() {
   const [inspection, setInspection] = useState({ x: Math.floor(MARS_4_9K.width / 2), y: Math.floor(MARS_4_9K.height / 2) });
   const [calibrationSeries, setCalibrationSeries] = useState("5, 7, 9, 11, 13");
   const [processMetadata, setProcessMetadata] = useState(DEFAULT_PROCESS);
+  const [photoresistPresetId, setPhotoresistPresetId] = useState("");
   const [sourceInfo, setSourceInfo] = useState<SourceInfo | null>(null);
   const calibrationMode = sourceInfo?.kind === "generated-calibration";
+  const photoresistPreset = PHOTORESISTS_405_NM.find(({ id }) => id === photoresistPresetId);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -590,6 +593,7 @@ export default function Home() {
       setSelectedLayers(restoredLayers);
       setSettings(restored.settings as MaskSettings);
       setProcessMetadata(restored.process);
+      setPhotoresistPresetId(PHOTORESISTS_405_NM.find(({ name }) => name === restored.process.photoresist)?.id ?? "");
       setSubstrateTemplateId(restored.substrateOutline?.templateId ?? "");
       setWaferMarker(restored.substrateOutline?.marker ?? "round");
       setIncludeSubstrateOutline(restored.substrateOutline?.included ?? false);
@@ -665,7 +669,15 @@ export default function Home() {
     setSettings({ ...settings, exposure: recipe.exposure });
     setCalibrationSeries(recipe.calibrationSeries);
     setProcessMetadata(recipe.process);
+    setPhotoresistPresetId(PHOTORESISTS_405_NM.find(({ name }) => name === recipe.process.photoresist)?.id ?? "");
     setMessage(`Process recipe “${recipe.name}” loaded.`);
+  }
+
+  function selectPhotoresistPreset(id: string) {
+    setPhotoresistPresetId(id);
+    const preset = PHOTORESISTS_405_NM.find((item) => item.id === id);
+    if (!preset) return;
+    setProcessMetadata({ ...processMetadata, photoresist: preset.name, thicknessNm: String(preset.referenceThicknessNm) });
   }
 
   function deleteRecipe() {
@@ -1112,9 +1124,27 @@ export default function Home() {
           <details className="process-metadata">
             <summary>Process metadata</summary>
             <div className="process-grid">
+              <label className="full-width">405 nm photoresist library <span>{PHOTORESISTS_405_NM.length} verified entries</span>
+                <select value={photoresistPresetId} onChange={(event) => selectPhotoresistPreset(event.target.value)}>
+                  <option value="">Custom / not listed</option>
+                  {PHOTORESIST_MANUFACTURERS_405_NM.map((manufacturer) => (
+                    <optgroup key={manufacturer} label={manufacturer}>
+                      {PHOTORESISTS_405_NM.filter((preset) => preset.manufacturer === manufacturer).map((preset) => (
+                        <option key={preset.id} value={preset.id}>{preset.name} · {preset.tone}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
+              {photoresistPreset && <aside className="photoresist-reference" aria-live="polite">
+                <strong>{photoresistPreset.manufacturer} · {photoresistPreset.name}</strong>
+                <span>{photoresistPreset.tone} · 405 nm documented · {photoresistPreset.referenceThicknessNm} nm at {photoresistPreset.referenceRpm} rpm.</span>
+                <span>{photoresistPreset.evidence}. This is a spin reference, not an exposure-dose prescription.</span>
+                <a href={photoresistPreset.sourceUrl} target="_blank" rel="noreferrer">Open manufacturer source ↗</a>
+              </aside>}
               <label>Photoresist
                 <input type="text" value={processMetadata.photoresist} placeholder="e.g. AZ1505"
-                  onChange={(event) => setProcessMetadata({ ...processMetadata, photoresist: event.target.value })} />
+                  onChange={(event) => { setPhotoresistPresetId(""); setProcessMetadata({ ...processMetadata, photoresist: event.target.value }); }} />
               </label>
               <label>Thickness <span>nm</span>
                 <input type="number" min="0" step="1" value={processMetadata.thicknessNm} placeholder="e.g. 600"
