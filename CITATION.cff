@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "If you use this software in research, please cite it using these metadata."
+title: "GDS2GOO"
+type: software
+version: "0.3.0"
+date-released: "2026-07-27"
+authors:
+  - family-names: "Parra G?mez"
+    given-names: "Jorge"
+    orcid: "https://orcid.org/0000-0003-4610-3411"
+repository-code: "https://github.com/jorpago2/gds2goo"
+url: "https://jorpago2.github.io/gds2goo/"
+license: MIT
