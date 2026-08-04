@@ -27,6 +27,7 @@ test("exports the GDS2GOO application shell", async () => {
   assert.match(html, /2-inch wafer · Ø50\.8 mm/);
   assert.match(html, /Microscope slide · 75 × 25 mm/);
   assert.match(html, /A tool by Jorge Parra/);
+  assert.match(html, /href="https:\/\/jorpago2\.github\.io\/"/);
   assert.match(html, /https:\/\/doi\.org\/10\.1002\/smtd\.202501336/);
   assert.match(html, /calibration pattern/);
   assert.match(html, /QUICK GUIDE/);
