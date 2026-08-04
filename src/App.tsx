@@ -958,6 +958,7 @@ export default function Home() {
 
   return (
     <main>
+      <a className="skip-link" href="#converter">Skip to converter</a>
       <header className="topbar">
         <a className="brand" href="#top" aria-label="GDS2GOO, home">
           <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
@@ -996,7 +997,7 @@ export default function Home() {
         </div>
       </details>
 
-      <section className="workspace" id="converter" aria-label="GDS to GOO converter">
+      <section className="workspace" id="converter" aria-label="GDS to GOO converter" tabIndex={-1}>
         <aside className="controls">
           <div className="step-heading"><span>01</span><div><p>INPUT</p><h2>File and layers</h2></div></div>
           <div

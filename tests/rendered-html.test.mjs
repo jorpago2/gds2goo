@@ -30,6 +30,8 @@ test("exports the GDS2GOO application shell", async () => {
   assert.match(html, /https:\/\/doi\.org\/10\.1002\/smtd\.202501336/);
   assert.match(html, /calibration pattern/);
   assert.match(html, /QUICK GUIDE/);
+  assert.match(html, /href="#converter"/);
+  assert.match(html, /id="converter"/);
   assert.match(html, /perform a dry exposure/);
   assert.match(html, /Process metadata/);
   assert.match(html, /Printer orientation check/);
