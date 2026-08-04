@@ -30,13 +30,16 @@ Local converter from GDSII layouts to single-layer `.goo` exposure files for the
 
 ## Run locally
 
-Requires Node.js 22.13 or later and pnpm.
+Requires Node.js 24 or later and pnpm 11.
 
 ```bash
 pnpm install
 pnpm dev
 pnpm test
 ```
+
+The application uses React, TypeScript and Vite and publishes the prerendered
+static bundle from `dist/`.
 
 Every change to `main` is published automatically to GitHub Pages through GitHub Actions.
 

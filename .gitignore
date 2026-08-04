@@ -13,11 +13,6 @@
 # testing
 /coverage
 
-# build
-/.next/
-/.vinext/
-/out/
-
 # misc
 .DS_Store
 *.pem
@@ -31,13 +26,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
-# vercel
-.vercel
-
 # typescript
-next-env.d.ts
 /dist/
-/.wrangler/
+/.ssr/
 /outputs/
 /work/
 /tmp/

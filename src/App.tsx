@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, DragEvent, MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import "./styles.css";
 import {
   boundsOf,
   estimateMinimumFeature,
