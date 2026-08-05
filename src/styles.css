@@ -268,6 +268,9 @@ footer .suite-link { min-height: 44px; display: inline-flex; align-items: center
 
 @media (max-width: 900px) {
   .workspace button, .workspace [role="button"], .workspace select, .workspace input:not([type="checkbox"]):not([type="range"]):not([type="file"]) { min-height: 44px; }
+  .workspace textarea { min-height: 44px; }
+  .layer-list button { min-width: 44px; }
+  .workspace input[type="range"] { min-height: 44px; }
   .grid-control, .substrate-controls .inline-check, .switch-row { min-height: 44px; }
   .topbar > p { display: none; }
   .hero, .workspace { grid-template-columns: 1fr; }
