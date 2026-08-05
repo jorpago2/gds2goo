@@ -966,17 +966,20 @@ export default function Home() {
         </a>
         <div className="device-pill"><span /> Elegoo Mars 4 · 9K</div>
         <p>Local conversion · no file leaves your browser</p>
+        <a className="suite-link" href="https://jorpago2.github.io/" aria-label="Online Simulators & Tools">All tools</a>
       </header>
 
-      <section className="hero" id="top">
+      <section className="tool-heading" id="top">
         <div>
           <p className="eyebrow">MASKLESS PHOTOLITHOGRAPHY TOOL</p>
-          <h1><span>From GDS layout</span><em>to the UV display.</em></h1>
+          <h1>GDS2GOO</h1>
+          <p>Load a layout, verify its placement and generate the exposure file when ready.</p>
         </div>
-        <div className="hero-summary">
+        <details className="tool-about">
+          <summary>Conversion scope</summary>
           <p className="hero-flow">GDSII <span>→</span> NATIVE RASTER <span>→</span> GOO V3.0</p>
           <p className="hero-copy">Rasterize physical geometries at native pixel resolution and generate a single-layer <code>.goo</code> exposure for the Mars 4 9K.</p>
-        </div>
+        </details>
       </section>
 
       <details className="quick-guide">
@@ -1091,6 +1094,7 @@ export default function Home() {
             </div>
           )}
 
+          {sourceInfo && <>
           <div className="divider" />
           <div className="step-heading"><span>02</span><div><p>MASK</p><h2>Exposure and orientation</h2></div></div>
           <div className="settings-grid">
@@ -1231,6 +1235,7 @@ export default function Home() {
             </label>
             <p>Saved locally in the companion <code>.run.json</code> file.</p>
           </details>
+          </>}
 
           <div className={`status ${outsideScreen ? "error" : outsideSubstrate ? "warning" : ""}`} role="status">
             <span>{outsideScreen || outsideSubstrate ? "!" : busy ? "…" : "✓"}</span>
@@ -1255,6 +1260,7 @@ export default function Home() {
         </aside>
 
         <section ref={previewPanel} className="preview-panel">
+          {sourceInfo && <>
           <div className="preview-toolbar">
             <div className="preview-heading">
               <div><span className="live-dot" /> LCD PREVIEW</div>
@@ -1427,6 +1433,7 @@ export default function Home() {
               <p className="substrate-note">Alignment marks are exported when selected. The dashed inner guide is the usable area and is never exported.</p>
             </div>
           )}
+          </>}
           <div className="lcd-shell">
             <div ref={lcdGrid} className="lcd-grid" title="Use the mouse wheel or a trackpad pinch gesture to zoom">
               {visibleShapes.length ? (
@@ -1520,6 +1527,7 @@ export default function Home() {
               <canvas ref={inspector} aria-label={`Native LCD pixels around ${inspection.x}, ${inspection.y}`} />
             </div>
           )}
+          {sourceInfo && <>
           <div className="metrics">
             <article><p>LAYOUT SIZE</p><strong>{bounds ? `${(bounds.width / 1000).toFixed(3)} × ${(bounds.height / 1000).toFixed(3)} mm` : "—"}</strong></article>
             <article><p>MINIMUM FEATURE*</p><strong className={minimumFeature !== null && minimumFeature < 36 ? "warn" : ""}>{minimumFeature === null ? "—" : `${minimumFeature.toFixed(1)} µm`}</strong></article>
@@ -1527,6 +1535,7 @@ export default function Home() {
             <article><p>ACTIVE LAYERS</p><strong>{selectedLayers.length || "—"}</strong></article>
           </div>
           <p className="metric-note">*Estimated from PATH width or the minimum bounding box of each polygon. The paper barely resolved 1 pixel; use ≥2 pixels (36 µm) for greater robustness.</p>
+          </>}
         </section>
       </section>
 
