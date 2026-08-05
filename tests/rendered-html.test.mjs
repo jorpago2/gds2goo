@@ -6,6 +6,9 @@ test("exports the GDS2GOO application shell", async () => {
   const html = await readFile(new URL("../dist/index.html", import.meta.url), "utf8");
   assert.match(html, /<title>GDS2GOO/);
   assert.match(html, /favicon\.svg/);
+  for (const metadata of ["theme-color", "canonical", "og:site_name", "og:url", "og:image:alt", "twitter:title", "twitter:description", "twitter:image:alt"]) {
+    assert.match(html, new RegExp(metadata));
+  }
   assert.match(html, /From GDS layout/);
   assert.match(html, /to the UV display/);
   assert.match(html, /NATIVE RASTER/);
