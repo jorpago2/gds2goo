@@ -46,6 +46,10 @@ test("exports the GDS2GOO application shell", async () => {
   const tokens = await readFile(new URL("../tokens.css", import.meta.url), "utf8");
   assert.match(styles, /macrostructure: Workbench/);
   assert.match(styles, /@import "\.\.\/tokens\.css"/);
+  assert.match(styles, /tailwindcss\/utilities\.css/);
+  assert.match(styles, /@theme inline/);
+  assert.doesNotMatch(styles, /tailwindcss\/preflight|@import\s+["']tailwindcss["']/);
+  assert.match(source, /bg-ui-canvas/);
   assert.match(tokens, /--color-accent:/);
   assert.doesNotMatch(styles, /#[0-9a-f]{3,8}|rgba?\(|100vw|overflow-x:\s*hidden/i);
   assert.match(html, /Printer orientation check/);

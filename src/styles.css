@@ -2,8 +2,31 @@
  * theme: Coral · nav: N9 · footer: Ft2 · enrichment: none · pre-emit critique: P5 H5 E4 S5 R5 V4
  * contrast: pass (40–41) · slop: pass (42–45) · honest: pass (46) · chrome: pass (47) · tokens: pass (48) · responsive: pass (49) · icons: pass (30) · mobile: pass (34, 49, 50–57)
  */
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap");
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
 @import "../tokens.css";
+
+@theme inline {
+  --color-ui-canvas: var(--color-paper);
+  --color-ui-canvas-muted: var(--color-paper-2);
+  --color-ui-surface: var(--color-surface);
+  --color-ui-surface-raised: var(--color-surface-raised);
+  --color-ui-ink: var(--color-ink);
+  --color-ui-muted: var(--color-muted);
+  --color-ui-border: var(--color-rule);
+  --color-ui-border-strong: var(--color-rule-2);
+  --color-ui-accent: var(--color-accent);
+  --color-ui-focus: var(--color-focus);
+  --color-ui-danger: var(--color-danger);
+  --color-ui-success: var(--color-success);
+  --font-ui-body: var(--font-body);
+  --font-ui-display: var(--font-display);
+  --radius-ui-control: var(--radius-input);
+  --radius-ui-panel: var(--radius-card);
+  --shadow-ui-raised: var(--shadow-raised);
+}
 
 :root {
   --ink: var(--color-ink);
@@ -26,7 +49,6 @@ button, a, summary { -webkit-tap-highlight-color: transparent; }
 .skip-link { position: fixed; z-index: var(--z-sticky); inset-block-start: var(--space-xs); inset-inline-start: var(--space-xs); padding: var(--space-xs) var(--space-sm); transform: translateY(-160%); background: var(--ink); color: var(--paper); text-decoration: none; }
 .skip-link:focus { transform: translateY(0); }
 
-.topbar { min-height: 4rem; padding-inline: var(--page-gutter); border-bottom: var(--rule-hair) solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: var(--space-lg); background: var(--paper); }
 .brand { display: flex; align-items: center; gap: var(--space-xs); color: var(--ink); text-decoration: none; font: 700 var(--text-md)/1 var(--font-display); letter-spacing: -.045em; white-space: nowrap; }
 .brand > span:not(.brand-mark) { color: var(--color-accent-deep); }
 .brand-mark { width: 1.5rem; height: 1.5rem; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3xs); transform: skewY(-12deg); }
@@ -38,7 +60,6 @@ button, a, summary { -webkit-tap-highlight-color: transparent; }
 .topbar-meta > p { margin: 0; color: var(--muted); font-size: var(--text-xs); white-space: nowrap; }
 .suite-link { min-height: 2.75rem; display: inline-flex; align-items: center; color: var(--ink); font: 700 var(--text-xs)/1 var(--font-display); letter-spacing: .04em; text-underline-offset: .25rem; text-transform: uppercase; white-space: nowrap; }
 
-.tool-heading { padding: var(--space-lg) var(--page-gutter); display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, 28rem); justify-content: space-between; gap: var(--space-xl); align-items: center; border-bottom: var(--rule-hair) solid var(--line); }
 .tool-heading h1 { min-width: 0; margin: 0; font: 700 clamp(2rem, 3vw, 3rem)/1 var(--font-display); letter-spacing: -.055em; overflow-wrap: anywhere; }
 .tool-heading > div > p:last-child { max-width: 64ch; margin: var(--space-xs) 0 0; color: var(--muted); font-size: var(--text-sm); }
 .tool-about { margin: 0; border-block: var(--rule-hair) solid var(--line); }
@@ -70,9 +91,7 @@ button, a, summary { -webkit-tap-highlight-color: transparent; }
 .guide-body .guide-safety { display: inline-block; max-width: 65ch; margin-block-start: var(--space-md); color: var(--color-neutral); }
 .guide-body > a { float: inline-end; margin-block-start: var(--space-sm); color: var(--ink); font: 700 var(--text-xs)/1 var(--font-display); text-underline-offset: var(--space-2xs); white-space: nowrap; }
 
-.workspace { display: grid; grid-template-columns: minmax(20rem, 24rem) minmax(0, 1fr); min-height: 47rem; border-bottom: var(--rule-hair) solid var(--line); }
 .workspace button, .workspace [role="button"], .workspace select, .workspace input:not([type="checkbox"]):not([type="range"]):not([type="file"]) { min-height: var(--control-height); }
-.controls { position: relative; padding: var(--space-lg) var(--space-md) var(--space-2xl) var(--page-gutter); border-inline-end: var(--rule-hair) solid var(--line); background: var(--panel); }
 .step-heading { display: grid; gap: var(--space-2xs); margin-block-end: var(--space-md); }
 .step-heading p { margin: 0; color: var(--color-accent-deep); font: 700 var(--text-xs)/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; }
 .step-heading h2 { margin: 0; font: 700 var(--text-md)/1.2 var(--font-display); letter-spacing: -.035em; }
@@ -175,7 +194,6 @@ button:focus-visible, a:focus-visible, summary:focus-visible, [role="button"]:fo
 
 h1, h2, h3 { min-width: 0; overflow-wrap: anywhere; }
 
-.preview-panel { container-type: inline-size; min-width: 0; padding: var(--space-lg) var(--page-gutter); background: var(--paper); }
 .preview-toolbar { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: end; gap: var(--space-md); margin-block-end: var(--space-sm); font: 600 var(--text-xs)/1 var(--font-display); letter-spacing: .06em; }
 .preview-heading { display: grid; gap: var(--space-2xs); white-space: nowrap; }
 .preview-tools { display: grid; grid-template-columns: auto auto minmax(13rem, 20rem); align-items: end; justify-content: end; gap: var(--space-sm); min-width: 0; }
