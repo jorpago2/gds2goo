@@ -70,3 +70,34 @@
   --z-raised: 10;
   --z-sticky: 200;
 }
+
+/* Carbon g10 governs UI surfaces, type, focus and shape. */
+:root,
+.cds--g10 {
+  --color-paper: var(--cds-background);
+  --color-paper-2: var(--cds-layer-01);
+  --color-paper-3: var(--cds-layer-02);
+  --color-surface: var(--cds-layer);
+  --color-surface-raised: var(--cds-field-01);
+  --color-ink: var(--cds-text-primary);
+  --color-ink-2: var(--cds-text-secondary);
+  --color-muted: var(--cds-text-secondary);
+  --color-neutral: var(--cds-icon-primary);
+  --color-rule: var(--cds-border-subtle);
+  --color-rule-2: var(--cds-border-strong);
+  --color-accent: var(--cds-link-primary);
+  --color-accent-deep: var(--cds-link-primary-hover);
+  --color-accent-soft: var(--cds-layer-accent-01);
+  --color-accent-ink: var(--cds-text-on-color);
+  --color-focus: var(--cds-focus);
+  --color-danger: var(--cds-support-error);
+  --color-warning: var(--cds-support-warning);
+  --color-success: var(--cds-support-success);
+  --font-display: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  --radius-card: 0;
+  --radius-pill: 0;
+  --radius-input: 0;
+  --shadow-raised: 0 2px 6px rgb(0 0 0 / 0.16);
+}

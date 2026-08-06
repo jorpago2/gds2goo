@@ -2,31 +2,7 @@
  * theme: Coral · nav: N9 · footer: Ft2 · enrichment: none · pre-emit critique: P5 H5 E4 S5 R5 V4
  * contrast: pass (40–41) · slop: pass (42–45) · honest: pass (46) · chrome: pass (47) · tokens: pass (48) · responsive: pass (49) · icons: pass (30) · mobile: pass (34, 49, 50–57)
  */
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap");
-@layer theme, base, components, utilities;
-@import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css" layer(utilities);
 @import "../tokens.css";
-
-@theme inline {
-  --color-ui-canvas: var(--color-paper);
-  --color-ui-canvas-muted: var(--color-paper-2);
-  --color-ui-surface: var(--color-surface);
-  --color-ui-surface-raised: var(--color-surface-raised);
-  --color-ui-ink: var(--color-ink);
-  --color-ui-muted: var(--color-muted);
-  --color-ui-border: var(--color-rule);
-  --color-ui-border-strong: var(--color-rule-2);
-  --color-ui-accent: var(--color-accent);
-  --color-ui-focus: var(--color-focus);
-  --color-ui-danger: var(--color-danger);
-  --color-ui-success: var(--color-success);
-  --font-ui-body: var(--font-body);
-  --font-ui-display: var(--font-display);
-  --radius-ui-control: var(--radius-input);
-  --radius-ui-panel: var(--radius-card);
-  --shadow-ui-raised: var(--shadow-raised);
-}
 
 :root {
   --ink: var(--color-ink);
@@ -39,6 +15,13 @@
 }
 
 * { box-sizing: border-box; }
+.app-shell.cds--grid { min-height: 100dvh; max-width: none; padding: 0; background: var(--paper); color: var(--ink); font-family: var(--font-body); }
+.app-shell-column { min-width: 0; max-width: none; padding: 0; }
+.topbar { min-height: 4rem; display: flex; align-items: center; justify-content: space-between; gap: 2rem; padding-inline: var(--page-gutter); border-bottom: 1px solid var(--line); background: var(--paper); }
+.tool-heading { display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, 28rem); align-items: center; justify-content: space-between; gap: 2.5rem; padding: 2rem var(--page-gutter); border-bottom: 1px solid var(--line); }
+.workspace { min-height: 47rem; display: grid; grid-template-columns: minmax(20rem, 24rem) minmax(0, 1fr); border-bottom: 1px solid var(--line); }
+.controls { position: relative; padding: 2rem 1.5rem 3rem var(--page-gutter); border-right: 1px solid var(--line); background: var(--panel); }
+.preview-panel { min-width: 0; padding: 2rem var(--page-gutter); background: var(--paper); container-type: inline-size; }
 html, body { overflow-x: clip; }
 html { scroll-behavior: smooth; }
 body { margin: 0; background: var(--paper); color: var(--ink); font: 400 var(--text-base)/1.5 var(--font-body); }

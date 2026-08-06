@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, DragEvent, MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
-import "./styles.css";
+import { Column, Grid } from "@carbon/react";
 import {
   boundsOf,
   estimateMinimumFeature,
@@ -957,9 +957,10 @@ export default function Home() {
   }
 
   return (
-    <main className="app-shell min-h-dvh bg-ui-canvas font-ui-body text-ui-ink">
+    <Grid as="main" fullWidth condensed className="app-shell">
+      <Column sm={4} md={8} lg={16} className="app-shell-column">
       <a className="skip-link" href="#converter">Skip to converter</a>
-      <header className="topbar flex min-h-16 items-center justify-between gap-8 border-b border-ui-border bg-ui-canvas px-[var(--page-gutter)]">
+      <header className="topbar">
         <a className="brand" href="#top" aria-label="GDS2GOO, home">
           <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
           GDS<span>2</span>GOO
@@ -971,7 +972,7 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="tool-heading grid grid-cols-[minmax(0,1fr)_minmax(16rem,28rem)] items-center justify-between gap-10 border-b border-ui-border px-[var(--page-gutter)] py-8" id="top">
+      <section className="tool-heading" id="top">
         <div>
           <h1>GDS2GOO</h1>
           <p>Convert a GDSII layout into a verified native-resolution exposure for the Elegoo Mars 4 9K.</p>
@@ -1001,8 +1002,8 @@ export default function Home() {
         </div>
       </details>
 
-      <section className="workspace grid min-h-188 grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)] border-b border-ui-border" id="converter" aria-label="GDS to GOO converter" tabIndex={-1}>
-        <aside className="controls relative border-r border-ui-border bg-ui-surface pt-8 pr-6 pb-12 pl-[var(--page-gutter)]">
+      <section className="workspace" id="converter" aria-label="GDS to GOO converter" tabIndex={-1}>
+        <aside className="controls">
           <div className="step-heading"><p>01 · Input</p><h2>File and layers</h2></div>
           <div
             className={`dropzone ${dragging ? "is-dragging" : ""}`}
@@ -1265,7 +1266,7 @@ export default function Home() {
           </div>
         </aside>
 
-        <section ref={previewPanel} className="preview-panel min-w-0 bg-ui-canvas px-[var(--page-gutter)] py-8 [container-type:inline-size]">
+        <section ref={previewPanel} className="preview-panel">
           {sourceInfo && <>
           <div className="preview-toolbar">
             <div className="preview-heading">
@@ -1598,6 +1599,7 @@ export default function Home() {
         <p>Based on <a href="https://doi.org/10.1002/smtd.202501336">Wu et al., <i>Small Methods</i> 9 (2025), e01336</a>. The optimum dose must be recalibrated for each photoresist, thickness, LCD and development process.</p>
         <p><a href="https://jorpago2.github.io/jorpago2/">A tool by Jorge Parra</a><br /><a className="suite-link" href="https://jorpago2.github.io/" aria-label="Online Simulators & Tools">All tools</a><br />405 nm · local-first · experimental use</p>
       </footer>
-    </main>
+      </Column>
+    </Grid>
   );
 }
