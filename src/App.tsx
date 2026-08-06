@@ -190,7 +190,7 @@ function drawResistResponse(
   canvas.height = height;
   const context = canvas.getContext("2d", { alpha: false });
   if (!context) throw new Error("The browser could not create the resist preview canvas.");
-  context.fillStyle = "#050807";
+  context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--color-viewer-deep").trim();
   context.fillRect(0, 0, width, height);
   context.filter = blurPixels > 0 ? `blur(${blurPixels}px)` : "none";
   context.drawImage(source, 0, 0);
@@ -471,7 +471,7 @@ export default function Home() {
       pixelMicrometers: MARS_4_9K.pixelMicrometers,
     });
     const context = drawBinaryPixels(inspector.current, pixels, INSPECTOR_SIZE, INSPECTOR_SIZE);
-    context.strokeStyle = "#ff5a1f";
+    context.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--color-accent").trim();
     context.lineWidth = 0.5;
     context.strokeRect(inspection.x - offsetX + 0.25, inspection.y - offsetY + 0.25, 0.5, 0.5);
   }, [repeatedShapes, settings, inspection, exportedSubstrateShapes]);
@@ -957,23 +957,24 @@ export default function Home() {
   }
 
   return (
-    <main>
+    <main className="app-shell">
       <a className="skip-link" href="#converter">Skip to converter</a>
       <header className="topbar">
         <a className="brand" href="#top" aria-label="GDS2GOO, home">
           <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
           GDS<span>2</span>GOO
         </a>
-        <div className="device-pill"><span /> Elegoo Mars 4 · 9K</div>
-        <p>Local conversion · no file leaves your browser</p>
-        <a className="suite-link" href="https://jorpago2.github.io/" aria-label="Online Simulators & Tools">All tools</a>
+        <div className="topbar-meta">
+          <div className="device-pill"><span /> Elegoo Mars 4 · 9K</div>
+          <p>Local conversion · no upload</p>
+          <a className="suite-link" href="https://jorpago2.github.io/" aria-label="Online Simulators & Tools">All tools</a>
+        </div>
       </header>
 
       <section className="tool-heading" id="top">
         <div>
-          <p className="eyebrow">MASKLESS PHOTOLITHOGRAPHY TOOL</p>
           <h1>GDS2GOO</h1>
-          <p>Load a layout, verify its placement and generate the exposure file when ready.</p>
+          <p>Convert a GDSII layout into a verified native-resolution exposure for the Elegoo Mars 4 9K.</p>
         </div>
         <details className="tool-about">
           <summary>Conversion scope</summary>
@@ -984,7 +985,7 @@ export default function Home() {
 
       <details className="quick-guide">
         <summary>
-          <span><b>QUICK GUIDE</b> From layout to a verified exposure</span>
+          <span><b>WORKFLOW GUIDE</b><span className="guide-summary">From layout to a verified exposure</span></span>
           <small>5 steps · about 2 min</small>
         </summary>
         <div className="guide-body">
@@ -1002,7 +1003,7 @@ export default function Home() {
 
       <section className="workspace" id="converter" aria-label="GDS to GOO converter" tabIndex={-1}>
         <aside className="controls">
-          <div className="step-heading"><span>01</span><div><p>INPUT</p><h2>File and layers</h2></div></div>
+          <div className="step-heading"><p>01 · Input</p><h2>File and layers</h2></div>
           <div
             className={`dropzone ${dragging ? "is-dragging" : ""}`}
             onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
@@ -1096,7 +1097,7 @@ export default function Home() {
 
           {sourceInfo && <>
           <div className="divider" />
-          <div className="step-heading"><span>02</span><div><p>MASK</p><h2>Exposure and orientation</h2></div></div>
+          <div className="step-heading"><p>02 · Mask</p><h2>Exposure and orientation</h2></div>
           <div className="settings-grid">
             <label>Exposure <span>s</span>
               <input type="number" min="0.1" max="600" step="0.1" value={settings.exposure}
@@ -1237,26 +1238,31 @@ export default function Home() {
           </details>
           </>}
 
-          <div className={`status ${outsideScreen ? "error" : outsideSubstrate ? "warning" : ""}`} role="status">
-            <span>{outsideScreen || outsideSubstrate ? "!" : busy ? "…" : "✓"}</span>
-            <p>{outsideScreen
-              ? "The mask exceeds the physical display area."
-              : outsideSubstrate
-                ? "The layout crosses the configured substrate usable area. Export remains available."
-                : message}</p>
+          <div className="export-dock">
+            <div className={`status ${outsideScreen ? "error" : outsideSubstrate ? "warning" : ""}`} role="status">
+              <span>{outsideScreen || outsideSubstrate ? "!" : busy ? "…" : "✓"}</span>
+              <p>{outsideScreen
+                ? "The mask exceeds the physical display area."
+                : outsideSubstrate
+                  ? "The layout crosses the configured substrate usable area. Export remains available."
+                  : message}</p>
+            </div>
+            <button className="primary-action" type="button" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportGoo()}>
+              {busy ? "Processing…" : "Generate .GOO"}<span>→</span>
+            </button>
+            <details className="export-options">
+              <summary>Other exports</summary>
+              <button className="secondary-action" type="button" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportPng()}>
+                Verification PNG
+              </button>
+              <button className="secondary-action bundle-action" type="button" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportBundle()}>
+                Experiment bundle (.zip)
+              </button>
+              <button className="secondary-action print-action" type="button" disabled={busy || !visibleShapes.length} onClick={() => window.print()}>
+                Experimental run sheet
+              </button>
+            </details>
           </div>
-          <button className="primary-action" type="button" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportGoo()}>
-            {busy ? "Processing…" : "Generate .GOO file"}<span>→</span>
-          </button>
-          <button className="secondary-action" type="button" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportPng()}>
-            Download 9K verification PNG
-          </button>
-          <button className="secondary-action bundle-action" type="button" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportBundle()}>
-            Download experiment bundle (.zip)
-          </button>
-          <button className="secondary-action print-action" type="button" disabled={busy || !visibleShapes.length} onClick={() => window.print()}>
-            Print experimental run sheet
-          </button>
         </aside>
 
         <section ref={previewPanel} className="preview-panel">
@@ -1365,7 +1371,9 @@ export default function Home() {
             </div>
           )}
           {substrateTemplate && (
-            <div className="substrate-controls" aria-label="Substrate configuration">
+            <details className="viewer-settings">
+              <summary><span>Substrate &amp; alignment</span><small>{substrateTemplate.label}</small></summary>
+              <div className="substrate-controls" aria-label="Substrate configuration">
               <fieldset className="substrate-group substrate-geometry">
                 <legend>Wafer geometry</legend>
               {substrateTemplateId.startsWith("custom-") && (
@@ -1431,7 +1439,8 @@ export default function Home() {
               </label>
               </fieldset>
               <p className="substrate-note">Alignment marks are exported when selected. The dashed inner guide is the usable area and is never exported.</p>
-            </div>
+              </div>
+            </details>
           )}
           </>}
           <div className="lcd-shell">

@@ -1,0 +1,9 @@
+{
+  "date": "2026-08-06",
+  "framework": "React 19 + TypeScript + Vite 8",
+  "font_stack": "Arial/Helvetica with an undefined mono token",
+  "palette": "warm cream, ink and signal orange",
+  "motion": "motion-cut; no animation library",
+  "spacing": "mixed pixel values without a named scale",
+  "scope": "single-route scientific workspace"
+}
