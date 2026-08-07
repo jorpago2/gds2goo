@@ -17,16 +17,16 @@ test("exports the GDS2GOO application shell", async () => {
   for (const section of ["Input", "Mask", "Process", "Export"]) assert.match(html, new RegExp(`>${section}<`));
   assert.match(html, /LCD READY/);
   assert.match(source, /Generate \.GOO/);
-  assert.match(source, /ZOOM/);
-  assert.match(source, /PIXEL GRID/);
-  assert.match(source, /RESIST RESPONSE/);
+  assert.match(source, /Zoom/);
+  assert.match(source, /Pixel grid/);
+  assert.match(source, /Resist response/);
   assert.match(source, /405 nm photoresist library/);
   assert.match(photoresists, /MICROPOSIT S1805/);
   assert.match(photoresists, /AR-N 4400-10/);
   assert.match(source, /UV logo GDS example/);
-  assert.match(source, /SUBSTRATE OUTLINE/);
-  assert.match(source, /MEASURE/);
-  assert.match(source, /FULL SCREEN/);
+  assert.match(source, /Substrate outline/);
+  assert.match(source, /Measure/);
+  assert.match(source, /Full screen/);
   assert.match(source, /Step-and-repeat/);
   assert.match(source, /Local process recipes/);
   assert.match(source, /Custom circular substrate/);
@@ -49,6 +49,10 @@ test("exports the GDS2GOO application shell", async () => {
   assert.match(source, /<Header className="app-header"/);
   assert.match(source, /className="workflow-navigation"/);
   assert.match(source, /data-panel-open/);
+  assert.doesNotMatch(source, /<(?:button|input|select|textarea|details|summary)\b/);
+  for (const component of ["Button", "NumberInput", "TextInput", "Select", "Checkbox", "Toggle", "Accordion", "FileUploaderDropContainer", "Layer"]) {
+    assert.match(source, new RegExp(`<${component}\\b`));
+  }
   assert.match(tokens, /--color-accent:/);
   assert.doesNotMatch(styles, /#[0-9a-f]{3,8}|rgba?\(|100vw|overflow-x:\s*hidden/i);
   assert.match(source, /Printer orientation check/);

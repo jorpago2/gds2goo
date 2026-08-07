@@ -1,7 +1,27 @@
 "use client";
 
-import { ChangeEvent, DragEvent, MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Content, Header, HeaderName } from "@carbon/react";
+import { MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Accordion,
+  AccordionItem,
+  Button,
+  Checkbox,
+  Content,
+  FileUploaderButton,
+  FileUploaderDropContainer,
+  Header,
+  HeaderName,
+  IconButton,
+  Layer,
+  NumberInput,
+  Select,
+  SelectItem,
+  SelectItemGroup,
+  Slider,
+  TextArea,
+  TextInput,
+  Toggle,
+} from "@carbon/react";
 
 import {
   boundsOf,
@@ -10,7 +30,7 @@ import {
   flattenGds,
   parseGds,
 } from "@/lib/gds.js";
-import { Chemistry, Document, Download, Grid as GridIcon } from "@carbon/react/icons";
+import { Chemistry, Close, Document, Download, Grid as GridIcon } from "@carbon/react/icons";
 import { buildGooFile, encodeBinaryLayer, MARS_4_9K, validateGooFile } from "@/lib/goo.js";
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "@/lib/calibration.js";
 import { fitsSubstrateArea, repeatShapes, transformGuideShapes } from "@/lib/experiment.js";
@@ -246,8 +266,6 @@ function boundedNumber(value: string, current: number, minimum: number, maximum:
 }
 
 export default function Home() {
-  const fileInput = useRef<HTMLInputElement>(null);
-  const runInput = useRef<HTMLInputElement>(null);
   const logoExampleButton = useRef<HTMLButtonElement>(null);
   const preview = useRef<HTMLCanvasElement>(null);
   const inspector = useRef<HTMLCanvasElement>(null);
@@ -261,7 +279,6 @@ export default function Home() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [message, setMessage] = useState("Load a GDSII file to begin.");
   const [busy, setBusy] = useState(false);
-  const [dragging, setDragging] = useState(false);
   const [previewZoom, setPreviewZoom] = useState(1);
   const [showPreviewGrid, setShowPreviewGrid] = useState(false);
   const [showResistResponse, setShowResistResponse] = useState(false);
@@ -595,16 +612,6 @@ export default function Home() {
     );
   }
 
-  function onFileChange(event: ChangeEvent<HTMLInputElement>) {
-    void loadFile(event.target.files?.[0]);
-  }
-
-  function onDrop(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    setDragging(false);
-    void loadFile(event.dataTransfer.files[0]);
-  }
-
   async function restoreRun(file?: File) {
     if (!file) return;
     if (!/\.run\.json$/i.test(file.name) || file.size > 1024 * 1024) {
@@ -666,8 +673,6 @@ export default function Home() {
       setMessage(`Run restored from ${file.name}. Verify the preview before export.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The run manifest could not be restored.");
-    } finally {
-      if (runInput.current) runInput.current.value = "";
     }
   }
 
@@ -1032,60 +1037,42 @@ export default function Home() {
       >
         <h1 className="visually-hidden">GDS2GOO scientific mask conversion workspace</h1>
         <nav className="workflow-navigation" aria-label="Configuration tools">
-          <button id="workflow-input" type="button" aria-controls="configuration-panel" aria-expanded={activePanel === "input"} className={activePanel === "input" ? "active" : ""} onClick={() => togglePanel("input")}>
-            <Document size={20} aria-hidden="true" /><span>Input</span>
-          </button>
-          <button id="workflow-mask" type="button" aria-controls="configuration-panel" aria-expanded={activePanel === "mask"} className={activePanel === "mask" ? "active" : ""} onClick={() => togglePanel("mask")}>
-            <GridIcon size={20} aria-hidden="true" /><span>Mask</span>
-          </button>
-          <button id="workflow-process" type="button" aria-controls="configuration-panel" aria-expanded={activePanel === "process"} className={activePanel === "process" ? "active" : ""} onClick={() => togglePanel("process")}>
-            <Chemistry size={20} aria-hidden="true" /><span>Process</span>
-          </button>
-          <button id="workflow-export" type="button" aria-controls="configuration-panel" aria-expanded={activePanel === "export"} className={activePanel === "export" ? "active" : ""} onClick={() => togglePanel("export")}>
-            <Download size={20} aria-hidden="true" /><span>Export</span>
-          </button>
+          <Button id="workflow-input" kind="ghost" size="md" renderIcon={Document} aria-controls="configuration-panel" aria-expanded={activePanel === "input"} className={activePanel === "input" ? "active" : ""} onClick={() => togglePanel("input")}>Input</Button>
+          <Button id="workflow-mask" kind="ghost" size="md" renderIcon={GridIcon} aria-controls="configuration-panel" aria-expanded={activePanel === "mask"} className={activePanel === "mask" ? "active" : ""} onClick={() => togglePanel("mask")}>Mask</Button>
+          <Button id="workflow-process" kind="ghost" size="md" renderIcon={Chemistry} aria-controls="configuration-panel" aria-expanded={activePanel === "process"} className={activePanel === "process" ? "active" : ""} onClick={() => togglePanel("process")}>Process</Button>
+          <Button id="workflow-export" kind="ghost" size="md" renderIcon={Download} aria-controls="configuration-panel" aria-expanded={activePanel === "export"} className={activePanel === "export" ? "active" : ""} onClick={() => togglePanel("export")}>Export</Button>
         </nav>
 
       {activePanel && (
-        <aside id="configuration-panel" className="app-panel" aria-labelledby="configuration-panel-title">
+        <Layer as="aside" id="configuration-panel" className="app-panel" withBackground aria-labelledby="configuration-panel-title">
           <div className="panel-header">
             <div><p>Configuration</p><h2 id="configuration-panel-title">{activePanel === "input" ? "Input & layers" : activePanel === "mask" ? "Mask & placement" : activePanel === "process" ? "Process & resist" : "Export & review"}</h2></div>
-            <button type="button" className="close-panel" onClick={closePanel} aria-label="Close configuration panel">×</button>
+            <IconButton className="close-panel" kind="ghost" size="sm" label="Close configuration panel" autoAlign onClick={closePanel}><Close /></IconButton>
           </div>
           <div className="panel-content controls">
             {activePanel === "input" && (
               <>
-                <div
-                  className={`dropzone ${dragging ? "is-dragging" : ""}`}
-                  onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
-                  onDragLeave={() => setDragging(false)}
-                  onDrop={onDrop}
-                  onClick={() => fileInput.current?.click()}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") fileInput.current?.click(); }}
-                >
-                  <input ref={fileInput} type="file" accept=".gds,.gdsii" onChange={onFileChange} />
-                  <span className="upload-icon" aria-hidden="true">↑</span>
-                  <strong>{fileName || "Drop your .gds file"}</strong>
-                  <small>{fileName ? "Click to replace it" : "or click to browse · max. 100 MB"}</small>
-                </div>
+                <FileUploaderDropContainer
+                  id="gds-file"
+                  className="gds-uploader"
+                  accept={[".gds", ".gdsii"]}
+                  maxFileSize={100 * 1024 * 1024}
+                  labelText={fileName ? `Replace ${fileName}` : "Drop or select a GDSII file · max. 100 MB"}
+                  onAddFiles={(_event, { addedFiles }) => void loadFile(addedFiles[0])}
+                />
 
                 <div className="source-actions">
-                  <button type="button" disabled={busy} onClick={loadCalibrationPattern}>18–180 µm calibration pattern</button>
-                  <button type="button" disabled={busy} onClick={loadOrientationPattern}>Printer orientation check</button>
-                  <button ref={logoExampleButton} type="button" disabled={busy} title="40.0 × 13.4 mm · layer 1 · 22.2 µm source grid" onClick={() => void loadLogoExample()}>UV logo GDS example</button>
-                  <button type="button" disabled={busy} onClick={() => runInput.current?.click()}>Restore .run.json</button>
-                  <input ref={runInput} type="file" accept=".json,application/json" onChange={(event) => void restoreRun(event.target.files?.[0])} />
+                  <Button kind="tertiary" size="sm" disabled={busy} onClick={loadCalibrationPattern}>18–180 µm calibration pattern</Button>
+                  <Button kind="tertiary" size="sm" disabled={busy} onClick={loadOrientationPattern}>Printer orientation check</Button>
+                  <Button ref={logoExampleButton} kind="tertiary" size="sm" disabled={busy} title="40.0 × 13.4 mm · layer 1 · 22.2 µm source grid" onClick={() => void loadLogoExample()}>UV logo GDS example</Button>
+                  <FileUploaderButton id="run-file" accept={[".json", "application/json"]} buttonKind="tertiary" size="sm" disabled={busy} labelText="Restore .run.json" onChange={(event) => void restoreRun(event.target.files?.[0])} />
                 </div>
 
                 {sourceInfo && (
                   <div className="file-options">
-                    {model && <label>Top cell
-                      <select value={topCell} onChange={(event) => changeTopCell(event.target.value)}>
-                        {model.topCells.map((cell) => <option key={cell}>{cell}</option>)}
-                      </select>
-                    </label>}
+                    {model && <Select id="top-cell" labelText="Top cell" size="sm" value={topCell} onChange={(event) => changeTopCell(event.target.value)}>
+                      {model.topCells.map((cell) => <SelectItem key={cell} value={cell} text={cell} />)}
+                    </Select>}
                     {model && (
                       <div className={`compatibility-report ${model.compatibility.warnings.length ? "has-warnings" : ""}`}>
                         <div><strong>GDS compatibility</strong><span>{model.compatibility.warnings.length ? `${model.compatibility.warnings.length} warning(s)` : "Ready"}</span></div>
@@ -1101,41 +1088,43 @@ export default function Home() {
                       <legend>Layers to expose</legend>
                       <div className="layer-list">
                         {layers.map((layer) => (
-                          <button
-                            type="button"
+                          <Button
+                            kind={selectedLayers.includes(layer) ? "primary" : "tertiary"}
+                            size="sm"
                             key={layer}
-                            className={selectedLayers.includes(layer) ? "active" : ""}
                             onClick={() => toggleLayer(layer)}
                             aria-pressed={selectedLayers.includes(layer)}
-                          >{calibrationMode ? `${layer * 18} µm` : `L${layer}`}</button>
+                          >{calibrationMode ? `${layer * 18} µm` : `L${layer}`}</Button>
                         ))}
                       </div>
                     </fieldset>
                     {selectedLayers.length > 1 && (
-                      <details className="process-metadata layer-exposures">
-                        <summary>Per-layer exposures</summary>
+                      <Accordion className="process-metadata layer-exposures" size="sm">
+                        <AccordionItem title="Per-layer exposures">
                         <div className="layer-exposure-grid">
                           {selectedLayers.map((layer) => (
-                            <label key={layer}>L{layer} <span>s</span>
-                              <input
-                                type="number"
-                                min="0.1"
-                                max="600"
-                                step="0.1"
+                            <NumberInput
+                                key={layer}
+                                id={`layer-exposure-${layer}`}
+                                label={`L${layer} · s`}
+                                size="sm"
+                                min={0.1}
+                                max={600}
+                                step={0.1}
                                 value={layerExposures[layer] ?? settings.exposure}
-                                onChange={(event) => setLayerExposures({
+                                onChange={(_event, { value }) => setLayerExposures({
                                   ...layerExposures,
-                                  [layer]: boundedNumber(event.target.value, layerExposures[layer] ?? settings.exposure, 0.1, 600),
+                                  [layer]: boundedNumber(String(value), layerExposures[layer] ?? settings.exposure, 0.1, 600),
                                 })}
                               />
-                            </label>
                           ))}
                         </div>
-                        <button type="button" disabled={busy || outsideScreen} onClick={() => void exportLayerFiles()}>
+                        <Button kind="secondary" size="sm" disabled={busy || outsideScreen} onClick={() => void exportLayerFiles()}>
                           Download layer exposure ZIP
-                        </button>
+                        </Button>
                         <p>One GOO per layer. Substrate outline and alignment marks are included only in the first file to avoid repeated dose.</p>
-                      </details>
+                        </AccordionItem>
+                      </Accordion>
                     )}
                     {sourceInfo?.kind === "generated-diagnostic" && (
                       <div className="diagnostic-note">
@@ -1151,145 +1140,107 @@ export default function Home() {
             {activePanel === "mask" && sourceInfo && (
               <>
                 <div className="settings-grid">
-                  <label>Exposure <span>s</span>
-                    <input type="number" min="0.1" max="600" step="0.1" value={settings.exposure}
-                      onChange={(event) => setSettings({ ...settings, exposure: boundedNumber(event.target.value, settings.exposure, 0.1, 600) })} />
-                  </label>
-                  <label>Rotation
-                    <select value={settings.rotation} onChange={(event) => setSettings({ ...settings, rotation: Number(event.target.value) })}>
-                      {[0, 90, 180, 270].map((angle) => <option key={angle} value={angle}>{angle}°</option>)}
-                    </select>
-                  </label>
-                  <label className="full-width">Placement anchor
-                    <select value={settings.anchor} onChange={(event) => setSettings({ ...settings, anchor: event.target.value as MaskSettings["anchor"] })}>
-                      <option value="center">Layout centre</option>
-                      <option value="gds-origin">GDS origin (0, 0)</option>
-                      <option value="lower-left">Layout lower-left</option>
-                    </select>
-                  </label>
-                  <label>Anchor X <span>µm</span>
-                    <input type="number" step="18" value={settings.offsetX}
-                      onChange={(event) => setSettings({ ...settings, offsetX: Number(event.target.value) })} />
-                  </label>
-                  <label>Anchor Y <span>µm</span>
-                    <input type="number" step="18" value={settings.offsetY}
-                      onChange={(event) => setSettings({ ...settings, offsetY: Number(event.target.value) })} />
-                  </label>
+                  <NumberInput id="mask-exposure" label="Exposure · s" size="sm" min={0.1} max={600} step={0.1} value={settings.exposure}
+                    onChange={(_event, { value }) => setSettings({ ...settings, exposure: boundedNumber(String(value), settings.exposure, 0.1, 600) })} />
+                  <Select id="mask-rotation" labelText="Rotation" size="sm" value={String(settings.rotation)} onChange={(event) => setSettings({ ...settings, rotation: Number(event.target.value) })}>
+                    {[0, 90, 180, 270].map((angle) => <SelectItem key={angle} value={String(angle)} text={`${angle}°`} />)}
+                  </Select>
+                  <Select id="mask-anchor" className="full-width" labelText="Placement anchor" size="sm" value={settings.anchor} onChange={(event) => setSettings({ ...settings, anchor: event.target.value as MaskSettings["anchor"] })}>
+                    <SelectItem value="center" text="Layout centre" />
+                    <SelectItem value="gds-origin" text="GDS origin (0, 0)" />
+                    <SelectItem value="lower-left" text="Layout lower-left" />
+                  </Select>
+                  <NumberInput id="mask-offset-x" label="Anchor X · µm" size="sm" step={18} value={settings.offsetX}
+                    onChange={(_event, { value }) => setSettings({ ...settings, offsetX: Number(value) })} />
+                  <NumberInput id="mask-offset-y" label="Anchor Y · µm" size="sm" step={18} value={settings.offsetY}
+                    onChange={(_event, { value }) => setSettings({ ...settings, offsetY: Number(value) })} />
                 </div>
                 <p className="placement-note">Anchor coordinates are measured from the LCD centre.</p>
-                <details className="process-metadata repeat-settings">
-                  <summary>Step-and-repeat</summary>
+                <Accordion className="process-metadata repeat-settings" size="sm">
+                  <AccordionItem title="Step-and-repeat">
                   <div className="process-grid">
-                    <label>Rows <span>1–10</span>
-                      <input type="number" min="1" max="10" step="1" value={repeatRows}
-                        onChange={(event) => setRepeatRows(Math.round(boundedNumber(event.target.value, repeatRows, 1, 10)))} />
-                    </label>
-                    <label>Columns <span>1–10</span>
-                      <input type="number" min="1" max="10" step="1" value={repeatColumns}
-                        onChange={(event) => setRepeatColumns(Math.round(boundedNumber(event.target.value, repeatColumns, 1, 10)))} />
-                    </label>
-                    <label>Pitch X <span>µm</span>
-                      <input type="number" min="0" step="18" value={repeatPitchX}
-                        onChange={(event) => setRepeatPitchX(boundedNumber(event.target.value, repeatPitchX, 0, 153360))} />
-                    </label>
-                    <label>Pitch Y <span>µm</span>
-                      <input type="number" min="0" step="18" value={repeatPitchY}
-                        onChange={(event) => setRepeatPitchY(boundedNumber(event.target.value, repeatPitchY, 0, 77760))} />
-                    </label>
+                    <NumberInput id="repeat-rows" label="Rows · 1–10" size="sm" min={1} max={10} step={1} value={repeatRows}
+                      onChange={(_event, { value }) => setRepeatRows(Math.round(boundedNumber(String(value), repeatRows, 1, 10)))} />
+                    <NumberInput id="repeat-columns" label="Columns · 1–10" size="sm" min={1} max={10} step={1} value={repeatColumns}
+                      onChange={(_event, { value }) => setRepeatColumns(Math.round(boundedNumber(String(value), repeatColumns, 1, 10)))} />
+                    <NumberInput id="repeat-pitch-x" label="Pitch X · µm" size="sm" min={0} step={18} value={repeatPitchX}
+                      onChange={(_event, { value }) => setRepeatPitchX(boundedNumber(String(value), repeatPitchX, 0, 153360))} />
+                    <NumberInput id="repeat-pitch-y" label="Pitch Y · µm" size="sm" min={0} step={18} value={repeatPitchY}
+                      onChange={(_event, { value }) => setRepeatPitchY(boundedNumber(String(value), repeatPitchY, 0, 77760))} />
                   </div>
                   <p>{repeatRows * repeatColumns} copies · pitch is centre-to-centre. Maximum 100 copies.</p>
-                </details>
+                  </AccordionItem>
+                </Accordion>
                 {calibrationMode && (
                   <div className="calibration-series">
-                    <label>Exposure series <span>s · comma-separated</span>
-                      <input type="text" value={calibrationSeries} onChange={(event) => setCalibrationSeries(event.target.value)} />
-                    </label>
-                    <button type="button" disabled={busy || outsideScreen} onClick={() => void exportCalibrationSeries()}>
+                    <TextInput id="calibration-series" labelText="Exposure series" helperText="Seconds · comma-separated" size="sm" value={calibrationSeries} onChange={(event) => setCalibrationSeries(event.target.value)} />
+                    <Button kind="secondary" size="sm" disabled={busy || outsideScreen} onClick={() => void exportCalibrationSeries()}>
                       Download calibration bundle (.zip)
-                    </button>
+                    </Button>
                     <p>Includes every GOO exposure, a 9K PNG and the run manifest.</p>
                   </div>
                 )}
                 <div className="toggle-row">
-                  <button type="button" className={settings.mirrorX ? "active" : ""} onClick={() => setSettings({ ...settings, mirrorX: !settings.mirrorX })}>↔ Mirror X</button>
-                  <button type="button" className={settings.mirrorY ? "active" : ""} onClick={() => setSettings({ ...settings, mirrorY: !settings.mirrorY })}>↕ Mirror Y</button>
+                  <Button kind={settings.mirrorX ? "primary" : "tertiary"} size="sm" aria-pressed={settings.mirrorX} onClick={() => setSettings({ ...settings, mirrorX: !settings.mirrorX })}>↔ Mirror X</Button>
+                  <Button kind={settings.mirrorY ? "primary" : "tertiary"} size="sm" aria-pressed={settings.mirrorY} onClick={() => setSettings({ ...settings, mirrorY: !settings.mirrorY })}>↕ Mirror Y</Button>
                 </div>
-                <label className="switch-row">
-                  <input type="checkbox" checked={settings.inverted} onChange={(event) => setSettings({ ...settings, inverted: event.target.checked })} />
-                  <span className="switch" />
-                  Invert polarity <small>{settings.inverted ? "exposed background" : "exposed geometry"}</small>
-                </label>
+                <Toggle id="invert-polarity" className="switch-row" size="sm" labelText="Invert polarity" labelA="Exposed geometry" labelB="Exposed background" toggled={settings.inverted} onToggle={(checked) => setSettings({ ...settings, inverted: checked })} />
               </>
             )}
 
             {activePanel === "process" && sourceInfo && (
               <>
-                <details className="process-metadata recipe-library">
-                  <summary>Local process recipes</summary>
-                  <label>Recipe name
-                    <input type="text" maxLength={50} value={recipeName} placeholder="e.g. AZ1505 · 600 nm"
-                      onChange={(event) => setRecipeName(event.target.value)} />
-                  </label>
-                  <button type="button" disabled={!recipeName.trim()} onClick={saveRecipe}>Save current process</button>
+                <Accordion className="process-metadata recipe-library" size="sm">
+                  <AccordionItem title="Local process recipes">
+                  <TextInput id="recipe-name" labelText="Recipe name" size="sm" maxLength={50} value={recipeName} placeholder="e.g. AZ1505 · 600 nm"
+                    onChange={(event) => setRecipeName(event.target.value)} />
+                  <Button kind="secondary" size="sm" disabled={!recipeName.trim()} onClick={saveRecipe}>Save current process</Button>
                   {recipes.length > 0 && (
                     <>
-                      <label>Saved recipes
-                        <select value={selectedRecipe} onChange={(event) => setSelectedRecipe(event.target.value)}>
-                          <option value="">Select a recipe</option>
-                          {recipes.map((recipe) => <option key={recipe.name} value={recipe.name}>{recipe.name}</option>)}
-                        </select>
-                      </label>
+                      <Select id="saved-recipe" labelText="Saved recipes" size="sm" value={selectedRecipe} onChange={(event) => setSelectedRecipe(event.target.value)}>
+                        <SelectItem value="" text="Select a recipe" />
+                        {recipes.map((recipe) => <SelectItem key={recipe.name} value={recipe.name} text={recipe.name} />)}
+                      </Select>
                       <div className="recipe-actions">
-                        <button type="button" disabled={!selectedRecipe} onClick={loadRecipe}>Load</button>
-                        <button type="button" disabled={!selectedRecipe} onClick={deleteRecipe}>Delete</button>
+                        <Button kind="secondary" size="sm" disabled={!selectedRecipe} onClick={loadRecipe}>Load</Button>
+                        <Button kind="danger--tertiary" size="sm" disabled={!selectedRecipe} onClick={deleteRecipe}>Delete</Button>
                       </div>
                     </>
                   )}
                   <p>Stored only in this browser. Recipes contain exposure and process metadata, not GDS geometry.</p>
-                </details>
+                  </AccordionItem>
+                </Accordion>
 
                 <div className="process-metadata">
                   <h3>Process metadata</h3>
                   <div className="process-grid">
-                    <label className="full-width">405 nm photoresist library <span>{PHOTORESISTS_405_NM.length} verified entries</span>
-                      <select value={photoresistPresetId} onChange={(event) => selectPhotoresistPreset(event.target.value)}>
-                        <option value="">Custom / not listed</option>
+                    <Select id="photoresist-library" className="full-width" labelText="405 nm photoresist library" helperText={`${PHOTORESISTS_405_NM.length} verified entries`} size="sm" value={photoresistPresetId} onChange={(event) => selectPhotoresistPreset(event.target.value)}>
+                        <SelectItem value="" text="Custom / not listed" />
                         {PHOTORESIST_MANUFACTURERS_405_NM.map((manufacturer) => (
-                          <optgroup key={manufacturer} label={manufacturer}>
+                          <SelectItemGroup key={manufacturer} label={manufacturer}>
                             {PHOTORESISTS_405_NM.filter((preset) => preset.manufacturer === manufacturer).map((preset) => (
-                              <option key={preset.id} value={preset.id}>{preset.name} · {preset.tone}</option>
+                              <SelectItem key={preset.id} value={preset.id} text={`${preset.name} · ${preset.tone}`} />
                             ))}
-                          </optgroup>
+                          </SelectItemGroup>
                         ))}
-                      </select>
-                    </label>
+                    </Select>
                     {photoresistPreset && <aside className="photoresist-reference" aria-live="polite">
                       <strong>{photoresistPreset.manufacturer} · {photoresistPreset.name}</strong>
                       <span>{photoresistPreset.tone} · 405 nm documented · {photoresistPreset.referenceThicknessNm} nm at {photoresistPreset.referenceRpm} rpm.</span>
                       <span>{photoresistPreset.evidence}. This is a spin reference, not an exposure-dose prescription.</span>
                       <a href={photoresistPreset.sourceUrl} target="_blank" rel="noreferrer">Open manufacturer source ↗</a>
                     </aside>}
-                    <label>Photoresist
-                      <input type="text" value={processMetadata.photoresist} placeholder="e.g. AZ1505"
-                        onChange={(event) => { setPhotoresistPresetId(""); setProcessMetadata({ ...processMetadata, photoresist: event.target.value }); }} />
-                    </label>
-                    <label>Thickness <span>nm</span>
-                      <input type="number" min="0" step="1" value={processMetadata.thicknessNm} placeholder="e.g. 600"
-                        onChange={(event) => setProcessMetadata({ ...processMetadata, thicknessNm: event.target.value })} />
-                    </label>
-                    <label>Soft bake
-                      <input type="text" value={processMetadata.softBake} placeholder="e.g. 100 °C · 60 s"
-                        onChange={(event) => setProcessMetadata({ ...processMetadata, softBake: event.target.value })} />
-                    </label>
-                    <label>Development
-                      <input type="text" value={processMetadata.development} placeholder="e.g. AZ 400K 1:4 · 45 s"
-                        onChange={(event) => setProcessMetadata({ ...processMetadata, development: event.target.value })} />
-                    </label>
+                    <TextInput id="process-photoresist" labelText="Photoresist" size="sm" value={processMetadata.photoresist} placeholder="e.g. AZ1505"
+                      onChange={(event) => { setPhotoresistPresetId(""); setProcessMetadata({ ...processMetadata, photoresist: event.target.value }); }} />
+                    <NumberInput id="process-thickness" label="Thickness · nm" size="sm" min={0} step={1} value={processMetadata.thicknessNm} allowEmpty placeholder="e.g. 600"
+                      onChange={(_event, { value }) => setProcessMetadata({ ...processMetadata, thicknessNm: String(value) })} />
+                    <TextInput id="process-soft-bake" labelText="Soft bake" size="sm" value={processMetadata.softBake} placeholder="e.g. 100 °C · 60 s"
+                      onChange={(event) => setProcessMetadata({ ...processMetadata, softBake: event.target.value })} />
+                    <TextInput id="process-development" labelText="Development" size="sm" value={processMetadata.development} placeholder="e.g. AZ 400K 1:4 · 45 s"
+                      onChange={(event) => setProcessMetadata({ ...processMetadata, development: event.target.value })} />
                   </div>
-                  <label>Notes
-                    <textarea value={processMetadata.notes} rows={2} placeholder="Substrate, contact mode, batch…"
-                      onChange={(event) => setProcessMetadata({ ...processMetadata, notes: event.target.value })} />
-                  </label>
+                  <TextArea id="process-notes" labelText="Notes" rows={2} value={processMetadata.notes} placeholder="Substrate, contact mode, batch…"
+                    onChange={(event) => setProcessMetadata({ ...processMetadata, notes: event.target.value })} />
                   <p>Saved locally in the companion <code>.run.json</code> file.</p>
                 </div>
               </>
@@ -1297,19 +1248,19 @@ export default function Home() {
 
             {activePanel === "export" && sourceInfo && (
               <div className="export-dock">
-                <button className="primary-action" type="button" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportGoo()}>
-                  {busy ? "Processing…" : "Generate .GOO"}<span>→</span>
-                </button>
+                <Button className="primary-action" kind="primary" size="lg" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportGoo()}>
+                  {busy ? "Processing…" : "Generate .GOO"}
+                </Button>
                 <div className="export-options">
-                  <button className="secondary-action" type="button" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportPng()}>
+                  <Button className="secondary-action" kind="secondary" size="md" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportPng()}>
                     Verification PNG
-                  </button>
-                  <button className="secondary-action bundle-action" type="button" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportBundle()}>
+                  </Button>
+                  <Button className="secondary-action bundle-action" kind="secondary" size="md" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportBundle()}>
                     Experiment bundle (.zip)
-                  </button>
-                  <button className="secondary-action print-action" type="button" disabled={busy || !visibleShapes.length} onClick={() => window.print()}>
+                  </Button>
+                  <Button className="secondary-action print-action" kind="tertiary" size="md" disabled={busy || !visibleShapes.length} onClick={() => window.print()}>
                     Experimental run sheet
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -1320,7 +1271,7 @@ export default function Home() {
                </div>
             )}
           </div>
-        </aside>
+        </Layer>
       )}
 
       <main className="app-result" data-empty={!sourceInfo}>
@@ -1333,173 +1284,118 @@ export default function Home() {
             </div>
             <div className="preview-tools">
               <div className="zoom-tools" aria-label="Viewer scale">
-                <label className="zoom-control">
-                  <span>ZOOM</span>
-                  <input
-                    type="range"
-                    min="1"
-                    max="64"
-                    step="0.5"
-                    value={previewZoom}
-                    disabled={!visibleShapes.length}
-                    onChange={(event) => setPreviewZoom(Number(event.target.value))}
-                  />
-                  <output>{previewZoom.toFixed(1)}×</output>
-                </label>
-                <button
+                <Slider
+                  id="preview-zoom"
+                  className="zoom-control"
+                  labelText="Zoom"
+                  min={1}
+                  max={64}
+                  step={0.5}
+                  value={previewZoom}
+                  disabled={!visibleShapes.length}
+                  hideTextInput
+                  formatLabel={(value) => `${value.toFixed(1)}×`}
+                  onChange={({ value }) => setPreviewZoom(Number(value))}
+                />
+                <Button
                   className="fullscreen-control"
-                  type="button"
+                  kind="tertiary"
+                  size="sm"
                   disabled={!visibleShapes.length}
                   aria-pressed={isFullscreen}
                   onClick={() => void toggleFullscreen()}
-                >{isFullscreen ? "EXIT FULL SCREEN" : "FULL SCREEN"}</button>
+                >{isFullscreen ? "Exit full screen" : "Full screen"}</Button>
               </div>
               <div className="preview-mode-tools" aria-label="Viewer overlays">
-                <label className="grid-control" title="Native 8520 × 4320 LCD pixel grid">
-                  <input
-                    type="checkbox"
-                    checked={showPreviewGrid}
-                    disabled={!visibleShapes.length}
-                    onChange={(event) => setShowPreviewGrid(event.target.checked)}
-                  />
-                  <span>PIXEL GRID</span>
-                </label>
-                <label className="grid-control" title="Relative latent-image response versus exposure time">
-                  <input
-                    type="checkbox"
-                    checked={showResistResponse}
-                    disabled={!visibleShapes.length}
-                    onChange={(event) => setShowResistResponse(event.target.checked)}
-                  />
-                  <span>RESIST RESPONSE</span>
-                </label>
-                <label className="grid-control" title="Measure between two clicks on the LCD preview">
-                  <input type="checkbox" checked={measureMode} disabled={!repeatedShapes.length}
-                    onChange={(event) => { setMeasureMode(event.target.checked); setMeasurementStart(null); setMeasurementEnd(null); }} />
-                  <span>MEASURE</span>
-                </label>
+                <Checkbox id="pixel-grid" className="grid-control" labelText="Pixel grid" title="Native 8520 × 4320 LCD pixel grid" checked={showPreviewGrid} disabled={!visibleShapes.length} onChange={(_event, { checked }) => setShowPreviewGrid(checked)} />
+                <Checkbox id="resist-response" className="grid-control" labelText="Resist response" title="Relative latent-image response versus exposure time" checked={showResistResponse} disabled={!visibleShapes.length} onChange={(_event, { checked }) => setShowResistResponse(checked)} />
+                <Checkbox id="measure-mode" className="grid-control" labelText="Measure" title="Measure between two clicks on the LCD preview" checked={measureMode} disabled={!repeatedShapes.length}
+                  onChange={(_event, { checked }) => { setMeasureMode(checked); setMeasurementStart(null); setMeasurementEnd(null); }} />
               </div>
-              <label className="template-control" title="Centred physical substrate outline">
-                <span>SUBSTRATE OUTLINE</span>
-                <select value={substrateTemplateId} onChange={(event) => setSubstrateTemplateId(event.target.value)}>
-                  <option value="">None</option>
+              <Select id="substrate-template" className="template-control" labelText="Substrate outline" title="Centred physical substrate outline" size="sm" value={substrateTemplateId} onChange={(event) => setSubstrateTemplateId(event.target.value)}>
+                  <SelectItem value="" text="None" />
                   {SUBSTRATE_TEMPLATES.map((template) => (
-                    <option key={template.id} value={template.id}>{template.label}</option>
+                    <SelectItem key={template.id} value={template.id} text={template.label} />
                   ))}
-                </select>
-              </label>
+              </Select>
             </div>
           </div>
           {showResistResponse && visibleShapes.length > 0 && (
             <div className="exposure-controls" aria-label="Resist exposure model">
-              <label>Photoresist <span>405 nm</span>
-                <select value={photoresistPresetId} onChange={(event) => selectPhotoresistPreset(event.target.value)}>
-                  <option value="">Generic / unassigned</option>
+              <Select id="viewer-photoresist" labelText="Photoresist" helperText="405 nm" size="sm" value={photoresistPresetId} onChange={(event) => selectPhotoresistPreset(event.target.value)}>
+                  <SelectItem value="" text="Generic / unassigned" />
                   {PHOTORESIST_MANUFACTURERS_405_NM.map((manufacturer) => (
-                    <optgroup key={manufacturer} label={manufacturer}>
+                    <SelectItemGroup key={manufacturer} label={manufacturer}>
                       {PHOTORESISTS_405_NM.filter((preset) => preset.manufacturer === manufacturer).map((preset) => (
-                        <option key={preset.id} value={preset.id}>{preset.name}</option>
+                        <SelectItem key={preset.id} value={preset.id} text={preset.name} />
                       ))}
-                    </optgroup>
+                    </SelectItemGroup>
                   ))}
-                </select>
-              </label>
-              <label>Irradiance <span>mW/cm² · {responseIrradianceIsEstimated ? "estimated" : "entered"}</span>
-                <input type="number" min="0" step="0.1" value={responseIrradianceMwCm2} placeholder="Enter a measured value"
-                  onChange={(event) => { setResponseIrradianceMwCm2(event.target.value); setResponseIrradianceIsEstimated(false); }} />
-              </label>
-              <label>Threshold time t₅₀ <span>s</span>
-                <input type="number" min="0.1" max="600" step="0.1" value={responseThresholdSeconds}
-                  onChange={(event) => setResponseThresholdSeconds(boundedNumber(event.target.value, responseThresholdSeconds, 0.1, 600))} />
-              </label>
-              <label>Optical blur σ <span>µm</span>
-                <input type="number" min="0" max="1000" step="1" value={opticalBlurMicrometers}
-                  onChange={(event) => setOpticalBlurMicrometers(boundedNumber(event.target.value, opticalBlurMicrometers, 0, 1000))} />
-              </label>
-              <label>Response steepness γ <span>0.2–20</span>
-                <input type="number" min="0.2" max="20" step="0.1" value={responseContrast}
-                  onChange={(event) => setResponseContrast(boundedNumber(event.target.value, responseContrast, 0.2, 20))} />
-              </label>
+              </Select>
+              <NumberInput id="viewer-irradiance" label={`Irradiance · mW/cm² · ${responseIrradianceIsEstimated ? "estimated" : "entered"}`} size="sm" min={0} step={0.1} value={responseIrradianceMwCm2} allowEmpty placeholder="Enter a measured value"
+                onChange={(_event, { value }) => { setResponseIrradianceMwCm2(String(value)); setResponseIrradianceIsEstimated(false); }} />
+              <NumberInput id="viewer-threshold" label="Threshold time t₅₀ · s" size="sm" min={0.1} max={600} step={0.1} value={responseThresholdSeconds}
+                onChange={(_event, { value }) => setResponseThresholdSeconds(boundedNumber(String(value), responseThresholdSeconds, 0.1, 600))} />
+              <NumberInput id="viewer-blur" label="Optical blur σ · µm" size="sm" min={0} max={1000} step={1} value={opticalBlurMicrometers}
+                onChange={(_event, { value }) => setOpticalBlurMicrometers(boundedNumber(String(value), opticalBlurMicrometers, 0, 1000))} />
+              <NumberInput id="viewer-contrast" label="Response steepness γ · 0.2–20" size="sm" min={0.2} max={20} step={0.1} value={responseContrast}
+                onChange={(_event, { value }) => setResponseContrast(boundedNumber(String(value), responseContrast, 0.2, 20))} />
               <div className="response-profile-note">
                 <p><strong>{(calculateResistResponse(1, settings.exposure, responseThresholdSeconds, responseContrast) * 100).toFixed(0)}%</strong> latent response for {photoresistPreset?.name ?? "the generic model"}. {photoresistPreset
                   ? <>{photoresistPreset.documentedContrast ? `Documented γ ${photoresistPreset.documentedContrast}. ` : ""}{referenceDose ? <>Reference dose {referenceDoseText} mJ/cm² ({photoresistPreset.referenceDoseBasis}){referenceTimeText ? ` = ${referenceTimeText} at the entered irradiance` : ""}. </> : "The data sheet provides no transferable 405 nm dose. "}<a href={photoresistPreset.sourceUrl} target="_blank" rel="noreferrer">Manufacturer source</a>. E₀ is not assumed to equal t₅₀.</>
                   : <>Assign a resist, then calibrate t₅₀ and σ from an exposure matrix.</>}</p>
                 <span>{responseIrradianceIsEstimated ? "10 mW/cm² · ESTIMATED FROM PAPER" : photoresistPreset ? responseProfileIsSaved ? "CALIBRATION SAVED" : savedResponseProfile ? "UNSAVED CHANGES" : photoresistPreset.documentedContrast ? "DOCUMENTED γ · CALIBRATION NEEDED" : "CALIBRATION NEEDED" : "NO RESIST ASSIGNED"}</span>
-                <button type="button" disabled={!photoresistPreset || responseProfileIsSaved} onClick={saveResponseProfile}>Save calibration</button>
+                <Button kind="tertiary" size="sm" disabled={!photoresistPreset || responseProfileIsSaved} onClick={saveResponseProfile}>Save calibration</Button>
               </div>
             </div>
           )}
           {substrateTemplate && (
-            <details className="viewer-settings">
-              <summary><span>Substrate &amp; alignment</span><small>{substrateTemplate.label}</small></summary>
+            <Accordion className="viewer-settings" size="sm">
+              <AccordionItem title={<><span>Substrate &amp; alignment</span><small>{substrateTemplate.label}</small></>}>
               <div className="substrate-controls" aria-label="Substrate configuration">
               <fieldset className="substrate-group substrate-geometry">
                 <legend>Wafer geometry</legend>
               {substrateTemplateId.startsWith("custom-") && (
                 <>
-                  <label>{substrateTemplate.shape === "circle" ? "Diameter" : "Width"} <span>mm</span>
-                    <input type="number" min="1" max={substrateTemplate.shape === "circle" ? 77.76 : 153.36} step="0.1" value={customWidth}
-                      onChange={(event) => setCustomWidth(boundedNumber(event.target.value, customWidth, 1, substrateTemplate.shape === "circle" ? 77.76 : 153.36))} />
-                  </label>
-                  {substrateTemplate.shape === "rectangle" && <label>Height <span>mm</span>
-                    <input type="number" min="1" max="77.76" step="0.1" value={customHeight}
-                      onChange={(event) => setCustomHeight(boundedNumber(event.target.value, customHeight, 1, 77.76))} />
-                  </label>}
+                  <NumberInput id="substrate-width" label={`${substrateTemplate.shape === "circle" ? "Diameter" : "Width"} · mm`} size="sm" min={1} max={substrateTemplate.shape === "circle" ? 77.76 : 153.36} step={0.1} value={customWidth}
+                    onChange={(_event, { value }) => setCustomWidth(boundedNumber(String(value), customWidth, 1, substrateTemplate.shape === "circle" ? 77.76 : 153.36))} />
+                  {substrateTemplate.shape === "rectangle" && <NumberInput id="substrate-height" label="Height · mm" size="sm" min={1} max={77.76} step={0.1} value={customHeight}
+                    onChange={(_event, { value }) => setCustomHeight(boundedNumber(String(value), customHeight, 1, 77.76))} />}
                 </>
               )}
               {substrateTemplate.shape === "circle" && (
-                <label title="SEMI nominal flat for 2/3-inch wafers; the 1-inch flat is a 4 mm guide.">Edge marker
-                  <select value={waferMarker} onChange={(event) => setWaferMarker(event.target.value as typeof waferMarker)}>
-                    <option value="round">None</option>
-                    <option value="flat">Primary flat</option>
-                    <option value="notch">90° notch</option>
-                  </select>
-                </label>
+                <Select id="wafer-marker" labelText="Edge marker" helperText="SEMI nominal flat for 2/3-inch wafers" size="sm" value={waferMarker} onChange={(event) => setWaferMarker(event.target.value as typeof waferMarker)}>
+                  <SelectItem value="round" text="None" />
+                  <SelectItem value="flat" text="Primary flat" />
+                  <SelectItem value="notch" text="90° notch" />
+                </Select>
               )}
-              {substrateTemplateId === "custom-circle" && waferMarker === "flat" && <label>Flat length <span>mm</span>
-                <input type="number" min="1" max={customWidth - 0.1} step="0.1" value={customFlatLength}
-                  onChange={(event) => setCustomFlatLength(boundedNumber(event.target.value, customFlatLength, 1, customWidth - 0.1))} />
-              </label>}
-              <label>Substrate X <span>µm</span>
-                <input type="number" step="18" value={substrateOffsetX} onChange={(event) => setSubstrateOffsetX(boundedNumber(event.target.value, substrateOffsetX, -153360, 153360))} />
-              </label>
-              <label>Substrate Y <span>µm</span>
-                <input type="number" step="18" value={substrateOffsetY} onChange={(event) => setSubstrateOffsetY(boundedNumber(event.target.value, substrateOffsetY, -77760, 77760))} />
-              </label>
-              <label>Substrate rotation <span>°</span>
-                <input type="number" min="-180" max="180" step="1" value={substrateRotation}
-                  onChange={(event) => setSubstrateRotation(boundedNumber(event.target.value, substrateRotation, -180, 180))} />
-              </label>
-              <label>Edge exclusion <span>mm</span>
-                <input type="number" min="0" max="20" step="0.1" value={edgeExclusion}
-                  onChange={(event) => setEdgeExclusion(boundedNumber(event.target.value, edgeExclusion, 0, 20))} />
-              </label>
+              {substrateTemplateId === "custom-circle" && waferMarker === "flat" && <NumberInput id="wafer-flat-length" label="Flat length · mm" size="sm" min={1} max={customWidth - 0.1} step={0.1} value={customFlatLength}
+                onChange={(_event, { value }) => setCustomFlatLength(boundedNumber(String(value), customFlatLength, 1, customWidth - 0.1))} />}
+              <NumberInput id="substrate-offset-x" label="Substrate X · µm" size="sm" step={18} value={substrateOffsetX} onChange={(_event, { value }) => setSubstrateOffsetX(boundedNumber(String(value), substrateOffsetX, -153360, 153360))} />
+              <NumberInput id="substrate-offset-y" label="Substrate Y · µm" size="sm" step={18} value={substrateOffsetY} onChange={(_event, { value }) => setSubstrateOffsetY(boundedNumber(String(value), substrateOffsetY, -77760, 77760))} />
+              <NumberInput id="substrate-rotation" label="Substrate rotation · °" size="sm" min={-180} max={180} step={1} value={substrateRotation}
+                onChange={(_event, { value }) => setSubstrateRotation(boundedNumber(String(value), substrateRotation, -180, 180))} />
+              <NumberInput id="edge-exclusion" label="Edge exclusion · mm" size="sm" min={0} max={20} step={0.1} value={edgeExclusion}
+                onChange={(_event, { value }) => setEdgeExclusion(boundedNumber(String(value), edgeExclusion, 0, 20))} />
               </fieldset>
               <fieldset className="substrate-group substrate-output">
                 <legend>Alignment &amp; mask</legend>
-              <label>Alignment marks
-                <select value={alignmentStyle} onChange={(event) => setAlignmentStyle(event.target.value as typeof alignmentStyle)}>
-                  <option value="none">None</option><option value="crosses">Crosses</option><option value="corners">Corner brackets</option>
-                  <option value="targets">Targets</option><option value="ruler">10 mm ruler</option><option value="full">Full set</option>
-                </select>
-              </label>
-              <label>Mark size <span>mm</span>
-                <input type="number" min="1" max="10" step="0.5" value={alignmentSize} disabled={alignmentStyle === "none"}
-                  onChange={(event) => setAlignmentSize(boundedNumber(event.target.value, alignmentSize, 1, 10))} />
-              </label>
-              <label className="inline-check" title="Rasterize the selected outline into GOO, PNG and ZIP outputs">
-                <input type="checkbox" checked={includeSubstrateOutline} onChange={(event) => setIncludeSubstrateOutline(event.target.checked)} />
-                Include outline in mask
-              </label>
-              <label>Guide line width <span>µm</span>
-                <input type="number" min="36" max="1000" step="18" value={substrateLineWidth}
-                  disabled={!includeSubstrateOutline && alignmentStyle === "none"}
-                  onChange={(event) => { const value = Number(event.target.value); if (value >= 36 && value <= 1000) setSubstrateLineWidth(value); }} />
-              </label>
+              <Select id="alignment-style" labelText="Alignment marks" size="sm" value={alignmentStyle} onChange={(event) => setAlignmentStyle(event.target.value as typeof alignmentStyle)}>
+                <SelectItem value="none" text="None" /><SelectItem value="crosses" text="Crosses" /><SelectItem value="corners" text="Corner brackets" />
+                <SelectItem value="targets" text="Targets" /><SelectItem value="ruler" text="10 mm ruler" /><SelectItem value="full" text="Full set" />
+              </Select>
+              <NumberInput id="alignment-size" label="Mark size · mm" size="sm" min={1} max={10} step={0.5} value={alignmentSize} disabled={alignmentStyle === "none"}
+                onChange={(_event, { value }) => setAlignmentSize(boundedNumber(String(value), alignmentSize, 1, 10))} />
+              <Checkbox id="include-substrate-outline" className="inline-check" labelText="Include outline in mask" title="Rasterize the selected outline into GOO, PNG and ZIP outputs" checked={includeSubstrateOutline} onChange={(_event, { checked }) => setIncludeSubstrateOutline(checked)} />
+              <NumberInput id="substrate-line-width" label="Guide line width · µm" size="sm" min={36} max={1000} step={18} value={substrateLineWidth}
+                disabled={!includeSubstrateOutline && alignmentStyle === "none"}
+                onChange={(_event, { value }) => { const number = Number(value); if (number >= 36 && number <= 1000) setSubstrateLineWidth(number); }} />
               </fieldset>
               <p className="substrate-note">Alignment marks are exported when selected. The dashed inner guide is the usable area and is never exported.</p>
               </div>
-            </details>
+              </AccordionItem>
+            </Accordion>
           )}
           </>}
           <div className="lcd-shell">
@@ -1585,13 +1481,13 @@ export default function Home() {
         </section>
       </main>
 
-      <aside id="pixel-inspector" className={`app-inspector ${showInspector ? "open" : ""}`} aria-labelledby="pixel-inspector-title" hidden={!showInspector}>
+      <Layer as="aside" id="pixel-inspector" className={`app-inspector ${showInspector ? "open" : ""}`} withBackground aria-labelledby="pixel-inspector-title" hidden={!showInspector}>
          {showInspector ? (
             <div className="pixel-inspector">
               <div className="inspector-header">
                 <p>Selection</p>
                 <h2 id="pixel-inspector-title">Native 1:1 inspector</h2>
-                <button type="button" className="close-panel" onClick={() => setInspectorOpen(false)} aria-label="Close pixel inspector">×</button>
+                <IconButton className="close-panel" kind="ghost" size="sm" label="Close pixel inspector" autoAlign onClick={() => setInspectorOpen(false)}><Close /></IconButton>
               </div>
               <div className="inspector-content">
                 <canvas ref={inspector} aria-label={`Native LCD pixels around ${inspection.x}, ${inspection.y}`} />
@@ -1611,9 +1507,9 @@ export default function Home() {
                <p>No objects selected</p>
             </div>
           )}
-      </aside>
+      </Layer>
 
-      <div className="app-status" data-kind={outsideScreen ? "error" : outsideSubstrate ? "warning" : busy ? "running" : sourceInfo ? "ready" : "idle"} aria-label="Mask status">
+      <Layer className="app-status" withBackground data-kind={outsideScreen ? "error" : outsideSubstrate ? "warning" : busy ? "running" : sourceInfo ? "ready" : "idle"} aria-label="Mask status">
         <p className="status-message" title={message}><span aria-hidden="true" />{message}</p>
         <dl className="status-metrics">
           <div><dt>LCD pixel</dt><dd>18 × 18 µm</dd></div>
@@ -1621,7 +1517,7 @@ export default function Home() {
           <div><dt>Minimum feature</dt><dd className={minimumFeature !== null && minimumFeature < 36 ? "warn" : ""}>{minimumFeature === null ? "—" : `${minimumFeature.toFixed(1)} µm`}</dd></div>
           <div><dt>Layers</dt><dd>{selectedLayers.length || "—"}</dd></div>
         </dl>
-      </div>
+      </Layer>
 
       <section className="print-sheet" aria-label="Experimental run sheet">
         <header>
