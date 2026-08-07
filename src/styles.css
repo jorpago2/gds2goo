@@ -219,10 +219,10 @@ h1, h2, h3 { min-width: 0; overflow-wrap: anywhere; }
 
 .print-sheet { display: none; }
 
-@container (max-width: 62.5rem) {
+@container (max-width: 85rem) {
   .preview-toolbar { grid-template-columns: 1fr; align-items: start; }
   .preview-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
-  .preview-tools { justify-content: stretch; grid-template-columns: auto 1fr; }
+  .preview-tools { justify-content: start; grid-template-columns: auto auto; }
   .preview-mode-tools { border-right: 0; }
   .template-control { grid-column: 1 / -1; }
 }

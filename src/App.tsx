@@ -1378,7 +1378,7 @@ export default function Home() {
                 </>
               )}
               {substrateTemplate.shape === "circle" && (
-                <Select id="wafer-marker" labelText="Edge marker" helperText="SEMI nominal flat for 2/3-inch wafers" size="sm" value={waferMarker} onChange={(event) => setWaferMarker(event.target.value as typeof waferMarker)}>
+                <Select id="wafer-marker" labelText="Edge marker" title="SEMI nominal flat for 2/3-inch wafers" size="sm" value={waferMarker} onChange={(event) => setWaferMarker(event.target.value as typeof waferMarker)}>
                   <SelectItem value="round" text="None" />
                   <SelectItem value="flat" text="Primary flat" />
                   <SelectItem value="notch" text="90° notch" />
