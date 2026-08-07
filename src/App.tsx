@@ -531,7 +531,10 @@ export default function Home() {
       y: Math.max(0, Math.min(MARS_4_9K.height - 1, Math.floor((event.clientY - rect.top) / rect.height * MARS_4_9K.height))),
     };
     setInspection(point);
-    if (!measureMode) setInspectorOpen(true);
+    if (!measureMode) {
+      if (window.matchMedia("(max-width: 75rem)").matches) setActivePanel(null);
+      setInspectorOpen(true);
+    }
     if (measureMode) {
       if (!measurementStart || measurementEnd) {
         setMeasurementStart(point);
@@ -998,6 +1001,17 @@ export default function Home() {
     return () => document.removeEventListener("keydown", handleEscape);
   }, [activePanel, inspectorOpen]);
 
+  useEffect(() => {
+    if (!activePanel || !inspectorOpen) return;
+    const compactLayout = window.matchMedia("(max-width: 75rem)");
+    const keepOneOverlay = () => {
+      if (compactLayout.matches) setActivePanel(null);
+    };
+    keepOneOverlay();
+    compactLayout.addEventListener("change", keepOneOverlay);
+    return () => compactLayout.removeEventListener("change", keepOneOverlay);
+  }, [activePanel, inspectorOpen]);
+
   const workspaceStatus = outsideScreen
     ? "Outside LCD"
     : outsideSubstrate
@@ -1047,7 +1061,7 @@ export default function Home() {
         <Layer as="aside" id="configuration-panel" className="app-panel" withBackground aria-labelledby="configuration-panel-title">
           <div className="panel-header">
             <div><p>Configuration</p><h2 id="configuration-panel-title">{activePanel === "input" ? "Input & layers" : activePanel === "mask" ? "Mask & placement" : activePanel === "process" ? "Process & resist" : "Export & review"}</h2></div>
-            <IconButton className="close-panel" kind="ghost" size="sm" label="Close configuration panel" autoAlign onClick={closePanel}><Close /></IconButton>
+            <IconButton className="close-panel" kind="ghost" size="sm" label="Close configuration panel" align="bottom-end" onClick={closePanel}><Close /></IconButton>
           </div>
           <div className="panel-content controls">
             {activePanel === "input" && (
@@ -1487,7 +1501,7 @@ export default function Home() {
               <div className="inspector-header">
                 <p>Selection</p>
                 <h2 id="pixel-inspector-title">Native 1:1 inspector</h2>
-                <IconButton className="close-panel" kind="ghost" size="sm" label="Close pixel inspector" autoAlign onClick={() => setInspectorOpen(false)}><Close /></IconButton>
+                <IconButton className="close-panel" kind="ghost" size="sm" label="Close pixel inspector" align="bottom-end" onClick={() => setInspectorOpen(false)}><Close /></IconButton>
               </div>
               <div className="inspector-content">
                 <canvas ref={inspector} aria-label={`Native LCD pixels around ${inspection.x}, ${inspection.y}`} />
@@ -1510,7 +1524,7 @@ export default function Home() {
       </Layer>
 
       <Layer className="app-status" withBackground data-kind={outsideScreen ? "error" : outsideSubstrate ? "warning" : busy ? "running" : sourceInfo ? "ready" : "idle"} aria-label="Mask status">
-        <p className="status-message" title={message}><span aria-hidden="true" />{message}</p>
+        <p className="status-message" title={message}><span aria-hidden="true" /><span className="status-message-text">{message}</span></p>
         <dl className="status-metrics">
           <div><dt>LCD pixel</dt><dd>18 × 18 µm</dd></div>
           <div><dt>Layout</dt><dd>{bounds ? `${(bounds.width / 1000).toFixed(3)} × ${(bounds.height / 1000).toFixed(3)} mm` : "—"}</dd></div>
