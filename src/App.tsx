@@ -1037,10 +1037,6 @@ export default function Home() {
             {workspaceStatus}
           </span>
         </div>
-        <div className="header-actions">
-          <span>Elegoo Mars 4 · 9K</span>
-          <a href="https://jorpago2.github.io/">All tools</a>
-        </div>
       </Header>
 
       <Content

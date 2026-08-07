@@ -28,7 +28,7 @@ a { -webkit-tap-highlight-color: transparent; }
 
 .app-header {
   display: grid;
-  grid-template-columns: auto minmax(12rem, 1fr) auto;
+  grid-template-columns: auto minmax(12rem, 1fr);
   align-items: center;
   block-size: var(--app-header-height);
   background: var(--cds-layer-01);
@@ -62,9 +62,6 @@ a { -webkit-tap-highlight-color: transparent; }
 .status-chip--warning { color: var(--color-warning); }
 .status-chip--error { color: var(--color-error); }
 .status-chip--idle { color: var(--muted); }
-.header-actions { display: flex; align-items: center; gap: var(--space-sm); padding-inline-end: var(--space-sm); color: var(--muted); font-size: var(--text-xs); white-space: nowrap; }
-.header-actions a { min-block-size: var(--app-header-height); display: inline-flex; align-items: center; color: var(--ink); font-weight: 600; text-underline-offset: var(--space-2xs); }
-
 .app-shell-content {
   max-inline-size: none;
   inline-size: 100%;
@@ -344,7 +341,7 @@ h1, h2, h3 { min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 48rem) {
   :root { --app-status-height: 3.5rem; }
   .app-header { grid-template-columns: auto minmax(0, 1fr); }
-  .header-actions, .context-title { display: none; }
+  .context-title { display: none; }
   .header-context { justify-content: flex-end; }
   .status-chip { max-inline-size: 16ch; overflow: hidden; text-overflow: ellipsis; }
   .app-shell-content,
