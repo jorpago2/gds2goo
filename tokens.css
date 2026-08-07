@@ -30,8 +30,9 @@
   --color-print-ink: oklch(12% 0.008 65);
   --color-print-rule: oklch(48% 0.008 70);
 
-  --font-display: "Space Grotesk", ui-sans-serif, sans-serif;
-  --font-body: "IBM Plex Sans", ui-sans-serif, sans-serif;
+  --font-display: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
 
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;

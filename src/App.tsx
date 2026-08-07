@@ -965,6 +965,13 @@ export default function Home() {
           <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
           GDS<span>2</span>GOO
         </a>
+        <div className="topbar-context" aria-live="polite">
+          <p className="topbar-context-label">Current workspace</p>
+          <p className="topbar-context-title">{sourceInfo ? `${topCell || "GDS"} · ${fileName || "untitled"}` : "No file loaded"}</p>
+          <span className={`status-chip ${outsideScreen ? "status-chip--error" : outsideSubstrate ? "status-chip--warning" : message === "Load a GDSII file to begin." ? "status-chip--idle" : "status-chip--ready"}`}>
+            {outsideScreen ? "Layout outside LCD" : outsideSubstrate ? "Substrate mismatch" : message}
+          </span>
+        </div>
         <div className="topbar-meta">
           <div className="device-pill"><span /> Elegoo Mars 4 · 9K</div>
           <p>Local conversion · no upload</p>
