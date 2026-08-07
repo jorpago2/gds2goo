@@ -1057,7 +1057,7 @@ export default function Home() {
                   className="gds-uploader"
                   accept={[".gds", ".gdsii"]}
                   maxFileSize={100 * 1024 * 1024}
-                  labelText={fileName ? "Replace GDSII" : "Select GDSII · max. 100 MB"}
+                  labelText={fileName ? `Replace ${fileName}` : "Drop or select a GDSII file · max. 100 MB"}
                   onAddFiles={(_event, { addedFiles }) => void loadFile(addedFiles[0])}
                 />
 
@@ -1306,26 +1306,20 @@ export default function Home() {
                   onClick={() => void toggleFullscreen()}
                 >{isFullscreen ? "Exit full screen" : "Full screen"}</Button>
               </div>
+              <div className="preview-mode-tools" aria-label="Viewer overlays">
+                <Checkbox id="pixel-grid" className="grid-control" labelText="Pixel grid" title="Native 8520 × 4320 LCD pixel grid" checked={showPreviewGrid} disabled={!visibleShapes.length} onChange={(_event, { checked }) => setShowPreviewGrid(checked)} />
+                <Checkbox id="resist-response" className="grid-control" labelText="Resist response" title="Relative latent-image response versus exposure time" checked={showResistResponse} disabled={!visibleShapes.length} onChange={(_event, { checked }) => setShowResistResponse(checked)} />
+                <Checkbox id="measure-mode" className="grid-control" labelText="Measure" title="Measure between two clicks on the LCD preview" checked={measureMode} disabled={!repeatedShapes.length}
+                  onChange={(_event, { checked }) => { setMeasureMode(checked); setMeasurementStart(null); setMeasurementEnd(null); }} />
+              </div>
+              <Select id="substrate-template" className="template-control" labelText="Substrate outline" title="Centred physical substrate outline" size="sm" value={substrateTemplateId} onChange={(event) => setSubstrateTemplateId(event.target.value)}>
+                  <SelectItem value="" text="None" />
+                  {SUBSTRATE_TEMPLATES.map((template) => (
+                    <SelectItem key={template.id} value={template.id} text={template.label} />
+                  ))}
+              </Select>
             </div>
           </div>
-          <Accordion className="viewer-display-settings" size="sm">
-            <AccordionItem title="Display & substrate">
-              <div className="viewer-display-controls">
-                <div className="preview-mode-tools" aria-label="Viewer overlays">
-                  <Checkbox id="pixel-grid" className="grid-control" labelText="Pixel grid" title="Native 8520 × 4320 LCD pixel grid" checked={showPreviewGrid} disabled={!visibleShapes.length} onChange={(_event, { checked }) => setShowPreviewGrid(checked)} />
-                  <Checkbox id="resist-response" className="grid-control" labelText="Resist response" title="Relative latent-image response versus exposure time" checked={showResistResponse} disabled={!visibleShapes.length} onChange={(_event, { checked }) => setShowResistResponse(checked)} />
-                  <Checkbox id="measure-mode" className="grid-control" labelText="Measure" title="Measure between two clicks on the LCD preview" checked={measureMode} disabled={!repeatedShapes.length}
-                    onChange={(_event, { checked }) => { setMeasureMode(checked); setMeasurementStart(null); setMeasurementEnd(null); }} />
-                </div>
-                <Select id="substrate-template" className="template-control" labelText="Substrate outline" title="Centred physical substrate outline" size="sm" value={substrateTemplateId} onChange={(event) => setSubstrateTemplateId(event.target.value)}>
-                    <SelectItem value="" text="None" />
-                    {SUBSTRATE_TEMPLATES.map((template) => (
-                      <SelectItem key={template.id} value={template.id} text={template.label} />
-                    ))}
-                </Select>
-              </div>
-            </AccordionItem>
-          </Accordion>
           {showResistResponse && visibleShapes.length > 0 && (
             <div className="exposure-controls" aria-label="Resist exposure model">
               <Select id="viewer-photoresist" labelText="Photoresist" helperText="405 nm" size="sm" value={photoresistPresetId} onChange={(event) => selectPhotoresistPreset(event.target.value)}>
@@ -1470,10 +1464,9 @@ export default function Home() {
                 </div>
               ) : (
                 <div className="empty-preview">
-                  <div className="empty-pattern" aria-hidden="true"><i /><i /><i /><i /><i /></div>
+                  <div className="empty-pattern"><i /><i /><i /><i /><i /></div>
                   <strong>LCD READY</strong>
                   <p>The mask will appear here at physical scale.</p>
-                  <Button kind="primary" size="sm" onClick={() => togglePanel("input")}>Load GDSII</Button>
                 </div>
               )}
             </div>

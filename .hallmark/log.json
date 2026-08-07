@@ -3,16 +3,6 @@
     "date": "2026-08-07",
     "scope": "app",
     "macrostructure": "Workbench",
-    "theme": "Carbon scientific shell",
-    "enrichment": "none",
-    "nav": "workflow rail / bottom bar",
-    "footer": "status strip",
-    "brief": "Progressive disclosure and mobile layer correction for GDS2GOO"
-  },
-  {
-    "date": "2026-08-07",
-    "scope": "app",
-    "macrostructure": "Workbench",
     "theme": "studied-DNA (source: reflectometry)",
     "enrichment": "none",
     "nav": "N9",
