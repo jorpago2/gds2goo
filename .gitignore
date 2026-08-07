@@ -34,3 +34,6 @@ yarn-error.log*
 /tmp/
 /tsconfig.tsbuildinfo
 /*.pdf
+
+*storybook.log
+storybook-static
