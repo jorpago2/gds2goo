@@ -1,1 +1,7 @@
-@use "@carbon/react" with ($font-path: "@ibm/plex");
+@use '@carbon/react/scss/config' with (
+  $font-path: "@ibm/plex"
+);
+@use "@carbon/react";
+@use "@carbon/react/scss/colors" as colors;
+@use "@carbon/react/scss/spacing" as spacing;
+@use "@carbon/react/scss/type" as type;

@@ -1,12 +1,12 @@
 [
   {
-    "date": "2026-08-06",
+    "date": "2026-08-07",
     "scope": "app",
     "macrostructure": "Workbench",
-    "theme": "Coral",
+    "theme": "studied-DNA (source: reflectometry)",
     "enrichment": "none",
     "nav": "N9",
-    "footer": "Ft2",
-    "brief": "GDS2GOO scientific workspace redesign"
+    "footer": "none",
+    "brief": "Scientific tool architecture applied to GDS2GOO"
   }
 ]

@@ -1,7 +1,8 @@
 "use client";
 
 import { ChangeEvent, DragEvent, MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Column, Grid } from "@carbon/react";
+import { Content, Header, HeaderName } from "@carbon/react";
+
 import {
   boundsOf,
   estimateMinimumFeature,
@@ -9,6 +10,7 @@ import {
   flattenGds,
   parseGds,
 } from "@/lib/gds.js";
+import { Chemistry, Document, Download, Grid as GridIcon } from "@carbon/react/icons";
 import { buildGooFile, encodeBinaryLayer, MARS_4_9K, validateGooFile } from "@/lib/goo.js";
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "@/lib/calibration.js";
 import { fitsSubstrateArea, repeatShapes, transformGuideShapes } from "@/lib/experiment.js";
@@ -269,6 +271,8 @@ export default function Home() {
   const [responseIrradianceMwCm2, setResponseIrradianceMwCm2] = useState(String(PAPER_IRRADIANCE_ESTIMATE_MW_CM2));
   const [responseIrradianceIsEstimated, setResponseIrradianceIsEstimated] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [activePanel, setActivePanel] = useState<"input" | "mask" | "process" | "export" | null>(null);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [substrateTemplateId, setSubstrateTemplateId] = useState("wafer-2");
   const [waferMarker, setWaferMarker] = useState<"round" | "flat" | "notch">("flat");
   const [includeSubstrateOutline, setIncludeSubstrateOutline] = useState(false);
@@ -510,6 +514,7 @@ export default function Home() {
       y: Math.max(0, Math.min(MARS_4_9K.height - 1, Math.floor((event.clientY - rect.top) / rect.height * MARS_4_9K.height))),
     };
     setInspection(point);
+    if (!measureMode) setInspectorOpen(true);
     if (measureMode) {
       if (!measurementStart || measurementEnd) {
         setMeasurementStart(point);
@@ -956,323 +961,369 @@ export default function Home() {
     }
   }
 
+  function closePanel() {
+    const panel = activePanel;
+    setActivePanel(null);
+    window.requestAnimationFrame(() => {
+      window.dispatchEvent(new Event("resize"));
+      if (panel) document.getElementById(`workflow-${panel}`)?.focus();
+    });
+  }
+
+  function togglePanel(panel: "input" | "mask" | "process" | "export") {
+    setActivePanel((current) => current === panel ? null : panel);
+    window.requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+  }
+
+  useEffect(() => {
+    if (!activePanel && !inspectorOpen) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.key !== "Escape") return;
+      event.preventDefault();
+      if (activePanel) {
+        const panel = activePanel;
+        setActivePanel(null);
+        window.requestAnimationFrame(() => {
+          window.dispatchEvent(new Event("resize"));
+          document.getElementById(`workflow-${panel}`)?.focus();
+        });
+      } else setInspectorOpen(false);
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [activePanel, inspectorOpen]);
+
+  const workspaceStatus = outsideScreen
+    ? "Outside LCD"
+    : outsideSubstrate
+      ? "Check substrate"
+      : busy
+        ? "Processing"
+        : sourceInfo
+          ? "Ready"
+          : "Needs input";
+  const showInspector = inspectorOpen && visibleShapes.length > 0;
+
   return (
-    <Grid as="main" fullWidth condensed className="app-shell">
-      <Column sm={4} md={8} lg={16} className="app-shell-column">
-      <a className="skip-link" href="#converter">Skip to converter</a>
-      <header className="topbar">
-        <a className="brand" href="#top" aria-label="GDS2GOO, home">
-          <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
-          GDS<span>2</span>GOO
-        </a>
-        <div className="topbar-context" aria-live="polite">
-          <p className="topbar-context-label">Current workspace</p>
-          <p className="topbar-context-title">{sourceInfo ? `${topCell || "GDS"} · ${fileName || "untitled"}` : "No file loaded"}</p>
-          <span className={`status-chip ${outsideScreen ? "status-chip--error" : outsideSubstrate ? "status-chip--warning" : message === "Load a GDSII file to begin." ? "status-chip--idle" : "status-chip--ready"}`}>
-            {outsideScreen ? "Layout outside LCD" : outsideSubstrate ? "Substrate mismatch" : message}
+    <>
+      <Header className="app-header" aria-label="GDS2GOO">
+        <HeaderName className="header-brand" href="#workspace" prefix="">GDS2GOO</HeaderName>
+        <div className="header-context" aria-label="Current workspace">
+          <p className="context-title">{sourceInfo ? `${topCell || "GDS"} · ${fileName || "untitled"}` : "No file loaded"}</p>
+          <span
+            className={`status-chip ${outsideScreen ? "status-chip--error" : outsideSubstrate ? "status-chip--warning" : busy ? "status-chip--running" : sourceInfo ? "status-chip--ready" : "status-chip--idle"}`}
+            role="status"
+            aria-live="polite"
+          >
+            {workspaceStatus}
           </span>
         </div>
-        <div className="topbar-meta">
-          <div className="device-pill"><span /> Elegoo Mars 4 · 9K</div>
-          <p>Local conversion · no upload</p>
-          <a className="suite-link" href="https://jorpago2.github.io/" aria-label="Online Simulators & Tools">All tools</a>
+        <div className="header-actions">
+          <span>Elegoo Mars 4 · 9K</span>
+          <a href="https://jorpago2.github.io/">All tools</a>
         </div>
-      </header>
+      </Header>
 
-      <section className="tool-heading" id="top">
-        <div>
-          <h1>GDS2GOO</h1>
-          <p>Convert a GDSII layout into a verified native-resolution exposure for the Elegoo Mars 4 9K.</p>
-        </div>
-        <details className="tool-about">
-          <summary>Conversion scope</summary>
-          <p className="hero-flow">GDSII <span>→</span> NATIVE RASTER <span>→</span> GOO V3.0</p>
-          <p className="hero-copy">Rasterize physical geometries at native pixel resolution and generate a single-layer <code>.goo</code> exposure for the Mars 4 9K.</p>
-        </details>
-      </section>
+      <Content
+        id="workspace"
+        className="app-shell-content"
+        data-panel-open={Boolean(activePanel)}
+        data-inspector-open={showInspector}
+      >
+        <h1 className="visually-hidden">GDS2GOO scientific mask conversion workspace</h1>
+        <nav className="workflow-navigation" aria-label="Configuration tools">
+          <button id="workflow-input" type="button" aria-controls="configuration-panel" aria-expanded={activePanel === "input"} className={activePanel === "input" ? "active" : ""} onClick={() => togglePanel("input")}>
+            <Document size={20} aria-hidden="true" /><span>Input</span>
+          </button>
+          <button id="workflow-mask" type="button" aria-controls="configuration-panel" aria-expanded={activePanel === "mask"} className={activePanel === "mask" ? "active" : ""} onClick={() => togglePanel("mask")}>
+            <GridIcon size={20} aria-hidden="true" /><span>Mask</span>
+          </button>
+          <button id="workflow-process" type="button" aria-controls="configuration-panel" aria-expanded={activePanel === "process"} className={activePanel === "process" ? "active" : ""} onClick={() => togglePanel("process")}>
+            <Chemistry size={20} aria-hidden="true" /><span>Process</span>
+          </button>
+          <button id="workflow-export" type="button" aria-controls="configuration-panel" aria-expanded={activePanel === "export"} className={activePanel === "export" ? "active" : ""} onClick={() => togglePanel("export")}>
+            <Download size={20} aria-hidden="true" /><span>Export</span>
+          </button>
+        </nav>
 
-      <details className="quick-guide">
-        <summary>
-          <span><b>WORKFLOW GUIDE</b><span className="guide-summary">From layout to a verified exposure</span></span>
-          <small>5 steps · about 2 min</small>
-        </summary>
-        <div className="guide-body">
-          <ol>
-            <li><span>01</span><div><strong>Prepare the layout</strong><p>Confirm the GDS physical units and prefer features of at least 36 µm for a robust first test.</p></div></li>
-            <li><span>02</span><div><strong>Load and select</strong><p>Drop the GDS, choose its top cell and enable only the layers that must be exposed.</p></div></li>
-            <li><span>03</span><div><strong>Place and array</strong><p>Set mask and substrate placement, edge exclusion and step-and-repeat. Display clipping blocks export.</p></div></li>
-            <li><span>04</span><div><strong>Calibrate the dose</strong><p>Use the built-in pattern and an exposure series for each resist, thickness, bake and development process.</p></div></li>
-            <li><span>05</span><div><strong>Inspect and record</strong><p>Measure, check polarity and native pixels, then download the experiment ZIP and print the run sheet.</p></div></li>
-          </ol>
-          <p className="guide-safety"><strong>First run:</strong> verify the GOO in UVtools and perform a dry exposure without photoresist. The default 9 s is a starting point, not a universal dose.</p>
-          <a href="#converter">Open the converter <span aria-hidden="true">↓</span></a>
-        </div>
-      </details>
-
-      <section className="workspace" id="converter" aria-label="GDS to GOO converter" tabIndex={-1}>
-        <aside className="controls">
-          <div className="step-heading"><p>01 · Input</p><h2>File and layers</h2></div>
-          <div
-            className={`dropzone ${dragging ? "is-dragging" : ""}`}
-            onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={onDrop}
-            onClick={() => fileInput.current?.click()}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") fileInput.current?.click(); }}
-          >
-            <input ref={fileInput} type="file" accept=".gds,.gdsii" onChange={onFileChange} />
-            <span className="upload-icon" aria-hidden="true">↑</span>
-            <strong>{fileName || "Drop your .gds file"}</strong>
-            <small>{fileName ? "Click to replace it" : "or click to browse · max. 100 MB"}</small>
+      {activePanel && (
+        <aside id="configuration-panel" className="app-panel" aria-labelledby="configuration-panel-title">
+          <div className="panel-header">
+            <div><p>Configuration</p><h2 id="configuration-panel-title">{activePanel === "input" ? "Input & layers" : activePanel === "mask" ? "Mask & placement" : activePanel === "process" ? "Process & resist" : "Export & review"}</h2></div>
+            <button type="button" className="close-panel" onClick={closePanel} aria-label="Close configuration panel">×</button>
           </div>
-
-          <div className="source-actions">
-            <button type="button" disabled={busy} onClick={loadCalibrationPattern}>18–180 µm calibration pattern</button>
-            <button type="button" disabled={busy} onClick={loadOrientationPattern}>Printer orientation check</button>
-            <button ref={logoExampleButton} type="button" disabled={busy} title="40.0 × 13.4 mm · layer 1 · 22.2 µm source grid" onClick={() => void loadLogoExample()}>UV logo GDS example</button>
-            <button type="button" disabled={busy} onClick={() => runInput.current?.click()}>Restore .run.json</button>
-            <input ref={runInput} type="file" accept=".json,application/json" onChange={(event) => void restoreRun(event.target.files?.[0])} />
-          </div>
-
-          {sourceInfo && (
-            <div className="file-options">
-              {model && <label>Top cell
-                <select value={topCell} onChange={(event) => changeTopCell(event.target.value)}>
-                  {model.topCells.map((cell) => <option key={cell}>{cell}</option>)}
-                </select>
-              </label>}
-              {model && (
-                <div className={`compatibility-report ${model.compatibility.warnings.length ? "has-warnings" : ""}`}>
-                  <div><strong>GDS compatibility</strong><span>{model.compatibility.warnings.length ? `${model.compatibility.warnings.length} warning(s)` : "Ready"}</span></div>
-                  <p>
-                    {model.compatibility.elementCounts.boundaries} BOUNDARY · {model.compatibility.elementCounts.boxes} BOX · {model.compatibility.elementCounts.paths} PATH · {model.compatibility.elementCounts.references} REF
-                  </p>
-                  {model.compatibility.warnings.length ? (
-                    <ul>{model.compatibility.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
-                  ) : <small>No unsupported exposure geometry detected.</small>}
-                </div>
-              )}
-              <fieldset>
-                <legend>Layers to expose</legend>
-                <div className="layer-list">
-                  {layers.map((layer) => (
-                    <button
-                      type="button"
-                      key={layer}
-                      className={selectedLayers.includes(layer) ? "active" : ""}
-                      onClick={() => toggleLayer(layer)}
-                      aria-pressed={selectedLayers.includes(layer)}
-                    >{calibrationMode ? `${layer * 18} µm` : `L${layer}`}</button>
-                  ))}
-                </div>
-              </fieldset>
-              {selectedLayers.length > 1 && (
-                <details className="process-metadata layer-exposures">
-                  <summary>Per-layer exposures</summary>
-                  <div className="layer-exposure-grid">
-                    {selectedLayers.map((layer) => (
-                      <label key={layer}>L{layer} <span>s</span>
-                        <input
-                          type="number"
-                          min="0.1"
-                          max="600"
-                          step="0.1"
-                          value={layerExposures[layer] ?? settings.exposure}
-                          onChange={(event) => setLayerExposures({
-                            ...layerExposures,
-                            [layer]: boundedNumber(event.target.value, layerExposures[layer] ?? settings.exposure, 0.1, 600),
-                          })}
-                        />
-                      </label>
-                    ))}
-                  </div>
-                  <button type="button" disabled={busy || outsideScreen} onClick={() => void exportLayerFiles()}>
-                    Download layer exposure ZIP
-                  </button>
-                  <p>One GOO per layer. Substrate outline and alignment marks are included only in the first file to avoid repeated dose.</p>
-                </details>
-              )}
-              {sourceInfo?.kind === "generated-diagnostic" && (
-                <div className="diagnostic-note">
-                  <strong>How to read it</strong>
-                  <p>Corner blocks increase clockwise: 1 top-left, 2 top-right, 3 bottom-right and 4 bottom-left. The long arrows indicate +X and +Y; the lower bar is 10.008 mm.</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {sourceInfo && <>
-          <div className="divider" />
-          <div className="step-heading"><p>02 · Mask</p><h2>Exposure and orientation</h2></div>
-          <div className="settings-grid">
-            <label>Exposure <span>s</span>
-              <input type="number" min="0.1" max="600" step="0.1" value={settings.exposure}
-                onChange={(event) => setSettings({ ...settings, exposure: boundedNumber(event.target.value, settings.exposure, 0.1, 600) })} />
-            </label>
-            <label>Rotation
-              <select value={settings.rotation} onChange={(event) => setSettings({ ...settings, rotation: Number(event.target.value) })}>
-                {[0, 90, 180, 270].map((angle) => <option key={angle} value={angle}>{angle}°</option>)}
-              </select>
-            </label>
-            <label className="full-width">Placement anchor
-              <select value={settings.anchor} onChange={(event) => setSettings({ ...settings, anchor: event.target.value as MaskSettings["anchor"] })}>
-                <option value="center">Layout centre</option>
-                <option value="gds-origin">GDS origin (0, 0)</option>
-                <option value="lower-left">Layout lower-left</option>
-              </select>
-            </label>
-            <label>Anchor X <span>µm</span>
-              <input type="number" step="18" value={settings.offsetX}
-                onChange={(event) => setSettings({ ...settings, offsetX: Number(event.target.value) })} />
-            </label>
-            <label>Anchor Y <span>µm</span>
-              <input type="number" step="18" value={settings.offsetY}
-                onChange={(event) => setSettings({ ...settings, offsetY: Number(event.target.value) })} />
-            </label>
-          </div>
-          <p className="placement-note">Anchor coordinates are measured from the LCD centre.</p>
-          <details className="process-metadata repeat-settings">
-            <summary>Step-and-repeat</summary>
-            <div className="process-grid">
-              <label>Rows <span>1–10</span>
-                <input type="number" min="1" max="10" step="1" value={repeatRows}
-                  onChange={(event) => setRepeatRows(Math.round(boundedNumber(event.target.value, repeatRows, 1, 10)))} />
-              </label>
-              <label>Columns <span>1–10</span>
-                <input type="number" min="1" max="10" step="1" value={repeatColumns}
-                  onChange={(event) => setRepeatColumns(Math.round(boundedNumber(event.target.value, repeatColumns, 1, 10)))} />
-              </label>
-              <label>Pitch X <span>µm</span>
-                <input type="number" min="0" step="18" value={repeatPitchX}
-                  onChange={(event) => setRepeatPitchX(boundedNumber(event.target.value, repeatPitchX, 0, 153360))} />
-              </label>
-              <label>Pitch Y <span>µm</span>
-                <input type="number" min="0" step="18" value={repeatPitchY}
-                  onChange={(event) => setRepeatPitchY(boundedNumber(event.target.value, repeatPitchY, 0, 77760))} />
-              </label>
-            </div>
-            <p>{repeatRows * repeatColumns} copies · pitch is centre-to-centre. Maximum 100 copies.</p>
-          </details>
-          {calibrationMode && (
-            <div className="calibration-series">
-              <label>Exposure series <span>s · comma-separated</span>
-                <input type="text" value={calibrationSeries} onChange={(event) => setCalibrationSeries(event.target.value)} />
-              </label>
-              <button type="button" disabled={busy || outsideScreen} onClick={() => void exportCalibrationSeries()}>
-                Download calibration bundle (.zip)
-              </button>
-              <p>Includes every GOO exposure, a 9K PNG and the run manifest.</p>
-            </div>
-          )}
-          <div className="toggle-row">
-            <button type="button" className={settings.mirrorX ? "active" : ""} onClick={() => setSettings({ ...settings, mirrorX: !settings.mirrorX })}>↔ Mirror X</button>
-            <button type="button" className={settings.mirrorY ? "active" : ""} onClick={() => setSettings({ ...settings, mirrorY: !settings.mirrorY })}>↕ Mirror Y</button>
-          </div>
-          <label className="switch-row">
-            <input type="checkbox" checked={settings.inverted} onChange={(event) => setSettings({ ...settings, inverted: event.target.checked })} />
-            <span className="switch" />
-            Invert polarity <small>{settings.inverted ? "exposed background" : "exposed geometry"}</small>
-          </label>
-
-          <details className="process-metadata recipe-library">
-            <summary>Local process recipes</summary>
-            <label>Recipe name
-              <input type="text" maxLength={50} value={recipeName} placeholder="e.g. AZ1505 · 600 nm"
-                onChange={(event) => setRecipeName(event.target.value)} />
-            </label>
-            <button type="button" disabled={!recipeName.trim()} onClick={saveRecipe}>Save current process</button>
-            {recipes.length > 0 && (
+          <div className="panel-content controls">
+            {activePanel === "input" && (
               <>
-                <label>Saved recipes
-                  <select value={selectedRecipe} onChange={(event) => setSelectedRecipe(event.target.value)}>
-                    <option value="">Select a recipe</option>
-                    {recipes.map((recipe) => <option key={recipe.name} value={recipe.name}>{recipe.name}</option>)}
-                  </select>
+                <div
+                  className={`dropzone ${dragging ? "is-dragging" : ""}`}
+                  onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={onDrop}
+                  onClick={() => fileInput.current?.click()}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") fileInput.current?.click(); }}
+                >
+                  <input ref={fileInput} type="file" accept=".gds,.gdsii" onChange={onFileChange} />
+                  <span className="upload-icon" aria-hidden="true">↑</span>
+                  <strong>{fileName || "Drop your .gds file"}</strong>
+                  <small>{fileName ? "Click to replace it" : "or click to browse · max. 100 MB"}</small>
+                </div>
+
+                <div className="source-actions">
+                  <button type="button" disabled={busy} onClick={loadCalibrationPattern}>18–180 µm calibration pattern</button>
+                  <button type="button" disabled={busy} onClick={loadOrientationPattern}>Printer orientation check</button>
+                  <button ref={logoExampleButton} type="button" disabled={busy} title="40.0 × 13.4 mm · layer 1 · 22.2 µm source grid" onClick={() => void loadLogoExample()}>UV logo GDS example</button>
+                  <button type="button" disabled={busy} onClick={() => runInput.current?.click()}>Restore .run.json</button>
+                  <input ref={runInput} type="file" accept=".json,application/json" onChange={(event) => void restoreRun(event.target.files?.[0])} />
+                </div>
+
+                {sourceInfo && (
+                  <div className="file-options">
+                    {model && <label>Top cell
+                      <select value={topCell} onChange={(event) => changeTopCell(event.target.value)}>
+                        {model.topCells.map((cell) => <option key={cell}>{cell}</option>)}
+                      </select>
+                    </label>}
+                    {model && (
+                      <div className={`compatibility-report ${model.compatibility.warnings.length ? "has-warnings" : ""}`}>
+                        <div><strong>GDS compatibility</strong><span>{model.compatibility.warnings.length ? `${model.compatibility.warnings.length} warning(s)` : "Ready"}</span></div>
+                        <p>
+                          {model.compatibility.elementCounts.boundaries} BOUNDARY · {model.compatibility.elementCounts.boxes} BOX · {model.compatibility.elementCounts.paths} PATH · {model.compatibility.elementCounts.references} REF
+                        </p>
+                        {model.compatibility.warnings.length ? (
+                          <ul>{model.compatibility.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+                        ) : <small>No unsupported exposure geometry detected.</small>}
+                      </div>
+                    )}
+                    <fieldset>
+                      <legend>Layers to expose</legend>
+                      <div className="layer-list">
+                        {layers.map((layer) => (
+                          <button
+                            type="button"
+                            key={layer}
+                            className={selectedLayers.includes(layer) ? "active" : ""}
+                            onClick={() => toggleLayer(layer)}
+                            aria-pressed={selectedLayers.includes(layer)}
+                          >{calibrationMode ? `${layer * 18} µm` : `L${layer}`}</button>
+                        ))}
+                      </div>
+                    </fieldset>
+                    {selectedLayers.length > 1 && (
+                      <details className="process-metadata layer-exposures">
+                        <summary>Per-layer exposures</summary>
+                        <div className="layer-exposure-grid">
+                          {selectedLayers.map((layer) => (
+                            <label key={layer}>L{layer} <span>s</span>
+                              <input
+                                type="number"
+                                min="0.1"
+                                max="600"
+                                step="0.1"
+                                value={layerExposures[layer] ?? settings.exposure}
+                                onChange={(event) => setLayerExposures({
+                                  ...layerExposures,
+                                  [layer]: boundedNumber(event.target.value, layerExposures[layer] ?? settings.exposure, 0.1, 600),
+                                })}
+                              />
+                            </label>
+                          ))}
+                        </div>
+                        <button type="button" disabled={busy || outsideScreen} onClick={() => void exportLayerFiles()}>
+                          Download layer exposure ZIP
+                        </button>
+                        <p>One GOO per layer. Substrate outline and alignment marks are included only in the first file to avoid repeated dose.</p>
+                      </details>
+                    )}
+                    {sourceInfo?.kind === "generated-diagnostic" && (
+                      <div className="diagnostic-note">
+                        <strong>How to read it</strong>
+                        <p>Corner blocks increase clockwise: 1 top-left, 2 top-right, 3 bottom-right and 4 bottom-left. The long arrows indicate +X and +Y; the lower bar is 10.008 mm.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
+            {activePanel === "mask" && sourceInfo && (
+              <>
+                <div className="settings-grid">
+                  <label>Exposure <span>s</span>
+                    <input type="number" min="0.1" max="600" step="0.1" value={settings.exposure}
+                      onChange={(event) => setSettings({ ...settings, exposure: boundedNumber(event.target.value, settings.exposure, 0.1, 600) })} />
+                  </label>
+                  <label>Rotation
+                    <select value={settings.rotation} onChange={(event) => setSettings({ ...settings, rotation: Number(event.target.value) })}>
+                      {[0, 90, 180, 270].map((angle) => <option key={angle} value={angle}>{angle}°</option>)}
+                    </select>
+                  </label>
+                  <label className="full-width">Placement anchor
+                    <select value={settings.anchor} onChange={(event) => setSettings({ ...settings, anchor: event.target.value as MaskSettings["anchor"] })}>
+                      <option value="center">Layout centre</option>
+                      <option value="gds-origin">GDS origin (0, 0)</option>
+                      <option value="lower-left">Layout lower-left</option>
+                    </select>
+                  </label>
+                  <label>Anchor X <span>µm</span>
+                    <input type="number" step="18" value={settings.offsetX}
+                      onChange={(event) => setSettings({ ...settings, offsetX: Number(event.target.value) })} />
+                  </label>
+                  <label>Anchor Y <span>µm</span>
+                    <input type="number" step="18" value={settings.offsetY}
+                      onChange={(event) => setSettings({ ...settings, offsetY: Number(event.target.value) })} />
+                  </label>
+                </div>
+                <p className="placement-note">Anchor coordinates are measured from the LCD centre.</p>
+                <details className="process-metadata repeat-settings">
+                  <summary>Step-and-repeat</summary>
+                  <div className="process-grid">
+                    <label>Rows <span>1–10</span>
+                      <input type="number" min="1" max="10" step="1" value={repeatRows}
+                        onChange={(event) => setRepeatRows(Math.round(boundedNumber(event.target.value, repeatRows, 1, 10)))} />
+                    </label>
+                    <label>Columns <span>1–10</span>
+                      <input type="number" min="1" max="10" step="1" value={repeatColumns}
+                        onChange={(event) => setRepeatColumns(Math.round(boundedNumber(event.target.value, repeatColumns, 1, 10)))} />
+                    </label>
+                    <label>Pitch X <span>µm</span>
+                      <input type="number" min="0" step="18" value={repeatPitchX}
+                        onChange={(event) => setRepeatPitchX(boundedNumber(event.target.value, repeatPitchX, 0, 153360))} />
+                    </label>
+                    <label>Pitch Y <span>µm</span>
+                      <input type="number" min="0" step="18" value={repeatPitchY}
+                        onChange={(event) => setRepeatPitchY(boundedNumber(event.target.value, repeatPitchY, 0, 77760))} />
+                    </label>
+                  </div>
+                  <p>{repeatRows * repeatColumns} copies · pitch is centre-to-centre. Maximum 100 copies.</p>
+                </details>
+                {calibrationMode && (
+                  <div className="calibration-series">
+                    <label>Exposure series <span>s · comma-separated</span>
+                      <input type="text" value={calibrationSeries} onChange={(event) => setCalibrationSeries(event.target.value)} />
+                    </label>
+                    <button type="button" disabled={busy || outsideScreen} onClick={() => void exportCalibrationSeries()}>
+                      Download calibration bundle (.zip)
+                    </button>
+                    <p>Includes every GOO exposure, a 9K PNG and the run manifest.</p>
+                  </div>
+                )}
+                <div className="toggle-row">
+                  <button type="button" className={settings.mirrorX ? "active" : ""} onClick={() => setSettings({ ...settings, mirrorX: !settings.mirrorX })}>↔ Mirror X</button>
+                  <button type="button" className={settings.mirrorY ? "active" : ""} onClick={() => setSettings({ ...settings, mirrorY: !settings.mirrorY })}>↕ Mirror Y</button>
+                </div>
+                <label className="switch-row">
+                  <input type="checkbox" checked={settings.inverted} onChange={(event) => setSettings({ ...settings, inverted: event.target.checked })} />
+                  <span className="switch" />
+                  Invert polarity <small>{settings.inverted ? "exposed background" : "exposed geometry"}</small>
                 </label>
-                <div className="recipe-actions">
-                  <button type="button" disabled={!selectedRecipe} onClick={loadRecipe}>Load</button>
-                  <button type="button" disabled={!selectedRecipe} onClick={deleteRecipe}>Delete</button>
+              </>
+            )}
+
+            {activePanel === "process" && sourceInfo && (
+              <>
+                <details className="process-metadata recipe-library">
+                  <summary>Local process recipes</summary>
+                  <label>Recipe name
+                    <input type="text" maxLength={50} value={recipeName} placeholder="e.g. AZ1505 · 600 nm"
+                      onChange={(event) => setRecipeName(event.target.value)} />
+                  </label>
+                  <button type="button" disabled={!recipeName.trim()} onClick={saveRecipe}>Save current process</button>
+                  {recipes.length > 0 && (
+                    <>
+                      <label>Saved recipes
+                        <select value={selectedRecipe} onChange={(event) => setSelectedRecipe(event.target.value)}>
+                          <option value="">Select a recipe</option>
+                          {recipes.map((recipe) => <option key={recipe.name} value={recipe.name}>{recipe.name}</option>)}
+                        </select>
+                      </label>
+                      <div className="recipe-actions">
+                        <button type="button" disabled={!selectedRecipe} onClick={loadRecipe}>Load</button>
+                        <button type="button" disabled={!selectedRecipe} onClick={deleteRecipe}>Delete</button>
+                      </div>
+                    </>
+                  )}
+                  <p>Stored only in this browser. Recipes contain exposure and process metadata, not GDS geometry.</p>
+                </details>
+
+                <div className="process-metadata">
+                  <h3>Process metadata</h3>
+                  <div className="process-grid">
+                    <label className="full-width">405 nm photoresist library <span>{PHOTORESISTS_405_NM.length} verified entries</span>
+                      <select value={photoresistPresetId} onChange={(event) => selectPhotoresistPreset(event.target.value)}>
+                        <option value="">Custom / not listed</option>
+                        {PHOTORESIST_MANUFACTURERS_405_NM.map((manufacturer) => (
+                          <optgroup key={manufacturer} label={manufacturer}>
+                            {PHOTORESISTS_405_NM.filter((preset) => preset.manufacturer === manufacturer).map((preset) => (
+                              <option key={preset.id} value={preset.id}>{preset.name} · {preset.tone}</option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                    </label>
+                    {photoresistPreset && <aside className="photoresist-reference" aria-live="polite">
+                      <strong>{photoresistPreset.manufacturer} · {photoresistPreset.name}</strong>
+                      <span>{photoresistPreset.tone} · 405 nm documented · {photoresistPreset.referenceThicknessNm} nm at {photoresistPreset.referenceRpm} rpm.</span>
+                      <span>{photoresistPreset.evidence}. This is a spin reference, not an exposure-dose prescription.</span>
+                      <a href={photoresistPreset.sourceUrl} target="_blank" rel="noreferrer">Open manufacturer source ↗</a>
+                    </aside>}
+                    <label>Photoresist
+                      <input type="text" value={processMetadata.photoresist} placeholder="e.g. AZ1505"
+                        onChange={(event) => { setPhotoresistPresetId(""); setProcessMetadata({ ...processMetadata, photoresist: event.target.value }); }} />
+                    </label>
+                    <label>Thickness <span>nm</span>
+                      <input type="number" min="0" step="1" value={processMetadata.thicknessNm} placeholder="e.g. 600"
+                        onChange={(event) => setProcessMetadata({ ...processMetadata, thicknessNm: event.target.value })} />
+                    </label>
+                    <label>Soft bake
+                      <input type="text" value={processMetadata.softBake} placeholder="e.g. 100 °C · 60 s"
+                        onChange={(event) => setProcessMetadata({ ...processMetadata, softBake: event.target.value })} />
+                    </label>
+                    <label>Development
+                      <input type="text" value={processMetadata.development} placeholder="e.g. AZ 400K 1:4 · 45 s"
+                        onChange={(event) => setProcessMetadata({ ...processMetadata, development: event.target.value })} />
+                    </label>
+                  </div>
+                  <label>Notes
+                    <textarea value={processMetadata.notes} rows={2} placeholder="Substrate, contact mode, batch…"
+                      onChange={(event) => setProcessMetadata({ ...processMetadata, notes: event.target.value })} />
+                  </label>
+                  <p>Saved locally in the companion <code>.run.json</code> file.</p>
                 </div>
               </>
             )}
-            <p>Stored only in this browser. Recipes contain exposure and process metadata, not GDS geometry.</p>
-          </details>
 
-          <details className="process-metadata">
-            <summary>Process metadata</summary>
-            <div className="process-grid">
-              <label className="full-width">405 nm photoresist library <span>{PHOTORESISTS_405_NM.length} verified entries</span>
-                <select value={photoresistPresetId} onChange={(event) => selectPhotoresistPreset(event.target.value)}>
-                  <option value="">Custom / not listed</option>
-                  {PHOTORESIST_MANUFACTURERS_405_NM.map((manufacturer) => (
-                    <optgroup key={manufacturer} label={manufacturer}>
-                      {PHOTORESISTS_405_NM.filter((preset) => preset.manufacturer === manufacturer).map((preset) => (
-                        <option key={preset.id} value={preset.id}>{preset.name} · {preset.tone}</option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </label>
-              {photoresistPreset && <aside className="photoresist-reference" aria-live="polite">
-                <strong>{photoresistPreset.manufacturer} · {photoresistPreset.name}</strong>
-                <span>{photoresistPreset.tone} · 405 nm documented · {photoresistPreset.referenceThicknessNm} nm at {photoresistPreset.referenceRpm} rpm.</span>
-                <span>{photoresistPreset.evidence}. This is a spin reference, not an exposure-dose prescription.</span>
-                <a href={photoresistPreset.sourceUrl} target="_blank" rel="noreferrer">Open manufacturer source ↗</a>
-              </aside>}
-              <label>Photoresist
-                <input type="text" value={processMetadata.photoresist} placeholder="e.g. AZ1505"
-                  onChange={(event) => { setPhotoresistPresetId(""); setProcessMetadata({ ...processMetadata, photoresist: event.target.value }); }} />
-              </label>
-              <label>Thickness <span>nm</span>
-                <input type="number" min="0" step="1" value={processMetadata.thicknessNm} placeholder="e.g. 600"
-                  onChange={(event) => setProcessMetadata({ ...processMetadata, thicknessNm: event.target.value })} />
-              </label>
-              <label>Soft bake
-                <input type="text" value={processMetadata.softBake} placeholder="e.g. 100 °C · 60 s"
-                  onChange={(event) => setProcessMetadata({ ...processMetadata, softBake: event.target.value })} />
-              </label>
-              <label>Development
-                <input type="text" value={processMetadata.development} placeholder="e.g. AZ 400K 1:4 · 45 s"
-                  onChange={(event) => setProcessMetadata({ ...processMetadata, development: event.target.value })} />
-              </label>
-            </div>
-            <label>Notes
-              <textarea value={processMetadata.notes} rows={2} placeholder="Substrate, contact mode, batch…"
-                onChange={(event) => setProcessMetadata({ ...processMetadata, notes: event.target.value })} />
-            </label>
-            <p>Saved locally in the companion <code>.run.json</code> file.</p>
-          </details>
-          </>}
+            {activePanel === "export" && sourceInfo && (
+              <div className="export-dock">
+                <button className="primary-action" type="button" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportGoo()}>
+                  {busy ? "Processing…" : "Generate .GOO"}<span>→</span>
+                </button>
+                <div className="export-options">
+                  <button className="secondary-action" type="button" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportPng()}>
+                    Verification PNG
+                  </button>
+                  <button className="secondary-action bundle-action" type="button" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportBundle()}>
+                    Experiment bundle (.zip)
+                  </button>
+                  <button className="secondary-action print-action" type="button" disabled={busy || !visibleShapes.length} onClick={() => window.print()}>
+                    Experimental run sheet
+                  </button>
+                </div>
+              </div>
+            )}
 
-          <div className="export-dock">
-            <div className={`status ${outsideScreen ? "error" : outsideSubstrate ? "warning" : ""}`} role="status">
-              <span>{outsideScreen || outsideSubstrate ? "!" : busy ? "…" : "✓"}</span>
-              <p>{outsideScreen
-                ? "The mask exceeds the physical display area."
-                : outsideSubstrate
-                  ? "The layout crosses the configured substrate usable area. Export remains available."
-                  : message}</p>
-            </div>
-            <button className="primary-action" type="button" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportGoo()}>
-              {busy ? "Processing…" : "Generate .GOO"}<span>→</span>
-            </button>
-            <details className="export-options">
-              <summary>Other exports</summary>
-              <button className="secondary-action" type="button" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportPng()}>
-                Verification PNG
-              </button>
-              <button className="secondary-action bundle-action" type="button" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportBundle()}>
-                Experiment bundle (.zip)
-              </button>
-              <button className="secondary-action print-action" type="button" disabled={busy || !visibleShapes.length} onClick={() => window.print()}>
-                Experimental run sheet
-              </button>
-            </details>
+            {activePanel && !sourceInfo && activePanel !== "input" && (
+               <div className="empty-panel-message">
+                 <p>Load a GDSII file first in the Input panel.</p>
+               </div>
+            )}
           </div>
         </aside>
+      )}
 
+      <main className="app-result" data-empty={!sourceInfo}>
         <section ref={previewPanel} className="preview-panel">
           {sourceInfo && <>
           <div className="preview-toolbar">
@@ -1531,30 +1582,46 @@ export default function Home() {
                 : measurementStart ? "MEASURE · Select the second point." : "MEASURE · Select the first point."}</p>
             )}
           </div>
-          {visibleShapes.length > 0 && (
+        </section>
+      </main>
+
+      <aside id="pixel-inspector" className={`app-inspector ${showInspector ? "open" : ""}`} aria-labelledby="pixel-inspector-title" hidden={!showInspector}>
+         {showInspector ? (
             <div className="pixel-inspector">
-              <div>
-                <p>NATIVE 1:1 INSPECTOR</p>
-                <strong>PX {inspection.x}, {inspection.y}</strong>
-                <span>
-                  {((inspection.x + 0.5) * 0.018 - MARS_4_9K.sizeX / 2).toFixed(3)} mm X · {(MARS_4_9K.sizeY / 2 - (inspection.y + 0.5) * 0.018).toFixed(3)} mm Y
-                </span>
+              <div className="inspector-header">
+                <p>Selection</p>
+                <h2 id="pixel-inspector-title">Native 1:1 inspector</h2>
+                <button type="button" className="close-panel" onClick={() => setInspectorOpen(false)} aria-label="Close pixel inspector">×</button>
+              </div>
+              <div className="inspector-content">
+                <canvas ref={inspector} aria-label={`Native LCD pixels around ${inspection.x}, ${inspection.y}`} />
+                <div className="inspector-metrics">
+                  <strong>PX {inspection.x}, {inspection.y}</strong>
+                  <span>
+                    {((inspection.x + 0.5) * 0.018 - MARS_4_9K.sizeX / 2).toFixed(3)} mm X
+                    <br />
+                    {(MARS_4_9K.sizeY / 2 - (inspection.y + 0.5) * 0.018).toFixed(3)} mm Y
+                  </span>
+                </div>
                 <small>Click the main preview to inspect a 64 × 64 native-pixel region.</small>
               </div>
-              <canvas ref={inspector} aria-label={`Native LCD pixels around ${inspection.x}, ${inspection.y}`} />
+            </div>
+          ) : (
+            <div className="empty-inspector">
+               <p>No objects selected</p>
             </div>
           )}
-          {sourceInfo && <>
-          <div className="metrics">
-            <article><p>LAYOUT SIZE</p><strong>{bounds ? `${(bounds.width / 1000).toFixed(3)} × ${(bounds.height / 1000).toFixed(3)} mm` : "—"}</strong></article>
-            <article><p>MINIMUM FEATURE*</p><strong className={minimumFeature !== null && minimumFeature < 36 ? "warn" : ""}>{minimumFeature === null ? "—" : `${minimumFeature.toFixed(1)} µm`}</strong></article>
-            <article><p>LCD PIXEL</p><strong>18 × 18 µm</strong></article>
-            <article><p>ACTIVE LAYERS</p><strong>{selectedLayers.length || "—"}</strong></article>
-          </div>
-          <p className="metric-note">*Estimated from PATH width or the minimum bounding box of each polygon. The paper barely resolved 1 pixel; use ≥2 pixels (36 µm) for greater robustness.</p>
-          </>}
-        </section>
-      </section>
+      </aside>
+
+      <div className="app-status" data-kind={outsideScreen ? "error" : outsideSubstrate ? "warning" : busy ? "running" : sourceInfo ? "ready" : "idle"} aria-label="Mask status">
+        <p className="status-message" title={message}><span aria-hidden="true" />{message}</p>
+        <dl className="status-metrics">
+          <div><dt>LCD pixel</dt><dd>18 × 18 µm</dd></div>
+          <div><dt>Layout</dt><dd>{bounds ? `${(bounds.width / 1000).toFixed(3)} × ${(bounds.height / 1000).toFixed(3)} mm` : "—"}</dd></div>
+          <div><dt>Minimum feature</dt><dd className={minimumFeature !== null && minimumFeature < 36 ? "warn" : ""}>{minimumFeature === null ? "—" : `${minimumFeature.toFixed(1)} µm`}</dd></div>
+          <div><dt>Layers</dt><dd>{selectedLayers.length || "—"}</dd></div>
+        </dl>
+      </div>
 
       <section className="print-sheet" aria-label="Experimental run sheet">
         <header>
@@ -1593,20 +1660,7 @@ export default function Home() {
         </div>
         <footer>Generated from the current local GDS2GOO state. Attach the companion <code>.run.json</code> to the laboratory record.</footer>
       </section>
-
-      <section className="science-strip">
-        <div><span>01</span><p><b>GDSII</b>Hierarchy, BOUNDARY, BOX, PATH, SREF and AREF</p></div>
-        <i>→</i>
-        <div><span>02</span><p><b>1:1 RASTER</b>18 µm/pixel · no automatic rescaling</p></div>
-        <i>→</i>
-        <div><span>03</span><p><b>GOO V3.0</b>One 0.05 mm layer · verified RLE and checksum</p></div>
-      </section>
-
-      <footer>
-        <p>Based on <a href="https://doi.org/10.1002/smtd.202501336">Wu et al., <i>Small Methods</i> 9 (2025), e01336</a>. The optimum dose must be recalibrated for each photoresist, thickness, LCD and development process.</p>
-        <p><a href="https://jorpago2.github.io/jorpago2/">A tool by Jorge Parra</a><br /><a className="suite-link" href="https://jorpago2.github.io/" aria-label="Online Simulators & Tools">All tools</a><br />405 nm · local-first · experimental use</p>
-      </footer>
-      </Column>
-    </Grid>
+      </Content>
+    </>
   );
 }
