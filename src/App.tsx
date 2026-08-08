@@ -6,6 +6,7 @@ import {
   AccordionItem,
   Button,
   Checkbox,
+  ComboBox,
   Content,
   FileUploaderButton,
   FileUploaderDropContainer,
@@ -20,6 +21,7 @@ import {
   SelectItem,
   SelectItemGroup,
   Slider,
+  Tag,
   TextArea,
   TextInput,
   Toggle,
@@ -120,6 +122,17 @@ type SourceInfo = {
   sha256: string | null;
 };
 
+type ExportReceipt = {
+  kind: "success" | "error";
+  title: string;
+  filename: string;
+  format: string;
+  timestamp: string;
+  geometryCount: number;
+  transform: string;
+  validation: string;
+};
+
 const DEFAULT_PROCESS: ProcessMetadata = {
   photoresist: "",
   thicknessNm: "",
@@ -135,6 +148,22 @@ const DEFAULT_RESIST_RESPONSE: ResistResponseProfile = {
 };
 
 const PAPER_IRRADIANCE_ESTIMATE_MW_CM2 = 10;
+
+function describeTransform(settings: MaskSettings) {
+  const anchor = settings.anchor === "center"
+    ? "centred"
+    : settings.anchor === "gds-origin"
+      ? "GDS origin"
+      : "lower left";
+  return [
+    `${settings.rotation}°`,
+    settings.mirrorX ? "mirror X" : null,
+    settings.mirrorY ? "mirror Y" : null,
+    `${settings.offsetX}, ${settings.offsetY} µm`,
+    anchor,
+    settings.inverted ? "background exposed" : "geometry exposed",
+  ].filter(Boolean).join(" · ");
+}
 
 function combinedMask(
   shapes: ReturnType<typeof flattenGds>,
@@ -270,6 +299,7 @@ function boundedNumber(value: string, current: number, minimum: number, maximum:
 export default function Home() {
   const logoExampleButton = useRef<HTMLButtonElement>(null);
   const preview = useRef<HTMLCanvasElement>(null);
+  const panelPreview = useRef<HTMLCanvasElement>(null);
   const inspector = useRef<HTMLCanvasElement>(null);
   const previewPanel = useRef<HTMLElement>(null);
   const lcdGrid = useRef<HTMLDivElement>(null);
@@ -322,6 +352,7 @@ export default function Home() {
   const [photoresistPresetId, setPhotoresistPresetId] = useState("");
   const [responseProfiles, setResponseProfiles] = useState<Record<string, ResistResponseProfile>>({});
   const [sourceInfo, setSourceInfo] = useState<SourceInfo | null>(null);
+  const [exportReceipt, setExportReceipt] = useState<ExportReceipt | null>(null);
   const calibrationMode = sourceInfo?.kind === "generated-calibration";
   const photoresistPreset = PHOTORESISTS_405_NM.find(({ id }) => id === photoresistPresetId);
   const savedResponseProfile = photoresistPresetId ? responseProfiles[photoresistPresetId] : undefined;
@@ -453,6 +484,7 @@ export default function Home() {
     distance: Math.hypot(measurementEnd.x - measurementStart.x, measurementEnd.y - measurementStart.y)
       * MARS_4_9K.pixelMicrometers / 1000,
   } : null;
+  const transformSummary = describeTransform(settings);
   const previewRasterSize = calculateViewerRasterSize(
     previewZoom,
     MARS_4_9K.width,
@@ -478,7 +510,18 @@ export default function Home() {
         opticalBlurMicrometers / (MARS_4_9K.pixelMicrometers * MARS_4_9K.width / previewRasterSize.width),
       );
     } else drawBinaryPixels(preview.current, pixels, previewRasterSize.width, previewRasterSize.height);
-  }, [repeatedShapes, settings, exportedSubstrateShapes, previewRasterSize.width, previewRasterSize.height, showResistResponse, responseThresholdSeconds, responseContrast, opticalBlurMicrometers]);
+    if (panelPreview.current) {
+      const width = 560;
+      const height = Math.round(width * previewRasterSize.height / previewRasterSize.width);
+      const context = panelPreview.current.getContext("2d", { alpha: false });
+      if (context) {
+        panelPreview.current.width = width;
+        panelPreview.current.height = height;
+        context.imageSmoothingEnabled = false;
+        context.drawImage(preview.current, 0, 0, width, height);
+      }
+    }
+  }, [repeatedShapes, settings, exportedSubstrateShapes, previewRasterSize.width, previewRasterSize.height, showResistResponse, responseThresholdSeconds, responseContrast, opticalBlurMicrometers, activePanel]);
 
   useEffect(() => {
     if (!inspector.current || !repeatedShapes.length) return;
@@ -830,14 +873,38 @@ export default function Home() {
     return { goo, check: validateGooFile(goo) };
   }
 
-  async function runExport(startMessage: string, fallbackMessage: string, operation: () => Promise<void>) {
+  function recordExport(format: string, filename: string, validation: string) {
+    setExportReceipt({
+      kind: "success",
+      title: "Export generated",
+      filename,
+      format,
+      timestamp: new Date().toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }),
+      geometryCount: repeatedShapes.length,
+      transform: transformSummary,
+      validation,
+    });
+  }
+
+  async function runExport(format: string, startMessage: string, fallbackMessage: string, operation: () => Promise<void>) {
     setBusy(true);
     setMessage(startMessage);
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     try {
       await operation();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : fallbackMessage);
+      const failure = error instanceof Error ? error.message : fallbackMessage;
+      setMessage(failure);
+      setExportReceipt({
+        kind: "error",
+        title: "Export failed",
+        filename: "No file generated",
+        format,
+        timestamp: new Date().toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }),
+        geometryCount: repeatedShapes.length,
+        transform: transformSummary,
+        validation: failure,
+      });
     } finally {
       setBusy(false);
     }
@@ -845,7 +912,7 @@ export default function Home() {
 
   async function exportGoo() {
     if (!visibleShapes.length || outsideScreen) return;
-    await runExport("Rasterizing 36.8 million pixels locally…", "The GOO file could not be generated.", async () => {
+    await runExport("GOO + run manifest", "Rasterizing 36.8 million pixels locally…", "The GOO file could not be generated.", async () => {
       const raster = rasterizeMask(repeatedShapes, settings, exportedSubstrateShapes);
       const { goo, check } = buildValidatedGoo(raster, settings.exposure);
       const baseName = outputBaseName();
@@ -853,12 +920,13 @@ export default function Home() {
       saveFile(goo, gooName, "application/octet-stream");
       saveFile(JSON.stringify(buildManifest([settings.exposure], [gooName]), null, 2), `${baseName}.run.json`, "application/json");
       setMessage(`GOO validated: ${check.pixels.toLocaleString("en-US")} pixels, 1 layer, ${settings.exposure} s.`);
+      recordExport("GOO + run manifest", `${gooName} + ${baseName}.run.json`, `${check.pixels.toLocaleString("en-US")} pixels validated · 1 layer · ${settings.exposure} s exposure.`);
     });
   }
 
   async function exportCalibrationSeries() {
     if (!calibrationMode || !visibleShapes.length || outsideScreen) return;
-    await runExport("Preparing calibration exposure series…", "The calibration series could not be generated.", async () => {
+    await runExport("Calibration experiment ZIP", "Preparing calibration exposure series…", "The calibration series could not be generated.", async () => {
       const exposures = parseExposureSeries(calibrationSeries);
       setMessage(`Rasterizing calibration series for ${exposures.length} exposure(s)…`);
       const raster = rasterizeMask(repeatedShapes, settings, exportedSubstrateShapes);
@@ -877,12 +945,14 @@ export default function Home() {
       entries.push({ name: "calibration-line-space.run.json", data: JSON.stringify(buildManifest(exposures, outputNames), null, 2) });
       saveFile(buildZip(entries), "calibration-line-space.experiment.zip", "application/zip");
       setMessage(`${exposures.length} validated calibration files packaged with PNG and manifest.`);
+      recordExport("Calibration experiment ZIP", "calibration-line-space.experiment.zip", `${exposures.length} GOO files validated with PNG and manifest.`);
     });
   }
 
   async function exportLayerFiles() {
     if (selectedLayers.length < 2 || outsideScreen) return;
     await runExport(
+      "Layer exposure ZIP",
       `Generating ${selectedLayers.length} independent layer exposure(s)…`,
       "The layer exposure package could not be generated.",
       async () => {
@@ -911,6 +981,7 @@ export default function Home() {
         entries.push({ name: `${outputBaseName()}-layers.run.json`, data: JSON.stringify(buildManifest(exposures, outputs), null, 2) });
         saveFile(buildZip(entries), `${outputBaseName()}-layer-exposures.zip`, "application/zip");
         setMessage(`${selectedLayers.length} layer-specific GOO files validated and packaged.`);
+        recordExport("Layer exposure ZIP", `${outputBaseName()}-layer-exposures.zip`, `${selectedLayers.length} layer-specific GOO files validated with run manifest.`);
       },
     );
   }
@@ -934,7 +1005,7 @@ export default function Home() {
 
   async function exportBundle() {
     if (!visibleShapes.length || outsideScreen) return;
-    await runExport("Building reproducible experiment package…", "The experiment package could not be generated.", async () => {
+    await runExport("Experiment ZIP", "Building reproducible experiment package…", "The experiment package could not be generated.", async () => {
       const raster = rasterizeMask(repeatedShapes, settings, exportedSubstrateShapes);
       const baseName = outputBaseName();
       const gooName = `${baseName}.goo`;
@@ -950,16 +1021,24 @@ export default function Home() {
       ]);
       saveFile(zip, `${baseName}.experiment.zip`, "application/zip");
       setMessage("Experiment package validated: GOO, 9K PNG and run manifest.");
+      recordExport("Experiment ZIP", `${baseName}.experiment.zip`, "GOO, 9K PNG and run manifest validated and packaged.");
     });
   }
 
   async function exportPng() {
     if (!visibleShapes.length || outsideScreen) return;
-    await runExport("Generating 9K verification PNG…", "The PNG could not be generated.", async () => {
+    await runExport("Verification PNG", "Generating 9K verification PNG…", "The PNG could not be generated.", async () => {
       const png = await encodePng(nativeMask(repeatedShapes, settings, exportedSubstrateShapes));
-      saveFile(png, `${fileName.replace(/\.gds(ii)?$/i, "") || "mask"}-8520x4320.png`, "image/png");
+      const pngName = `${fileName.replace(/\.gds(ii)?$/i, "") || "mask"}-8520x4320.png`;
+      saveFile(png, pngName, "image/png");
       setMessage("9K PNG generated. Use it to verify orientation and polarity.");
+      recordExport("Verification PNG", pngName, "Native 8520 × 4320 orientation and polarity image generated.");
     });
+  }
+
+  function printRunSheet() {
+    recordExport("Print", "Experimental run sheet", "Run sheet prepared from the current validated workspace state.");
+    window.print();
   }
 
   async function toggleFullscreen() {
@@ -1059,8 +1138,17 @@ export default function Home() {
         <Layer as="aside" id="configuration-panel" className="app-panel" withBackground aria-labelledby="configuration-panel-title">
           <div className="panel-header">
             <div><p>Configuration</p><h2 id="configuration-panel-title">{activePanel === "input" ? "Input & layers" : activePanel === "mask" ? "Mask & placement" : activePanel === "process" ? "Process & resist" : "Export & review"}</h2></div>
-            <IconButton className="close-panel" kind="ghost" size="sm" label="Close configuration panel" align="bottom-end" onClick={closePanel}><Close /></IconButton>
+            <IconButton className="close-panel" kind="ghost" size="lg" label="Close configuration panel" align="bottom-end" onClick={closePanel}><Close /></IconButton>
           </div>
+          {sourceInfo && activePanel !== "input" && (
+            <div className="mobile-panel-preview" aria-label="Live mask preview">
+              <div>
+                <strong>Live preview</strong>
+                <span>{transformSummary}</span>
+              </div>
+              <canvas ref={panelPreview} aria-label="Compact live mask preview" />
+            </div>
+          )}
           <div className="panel-content controls">
             {activePanel === "input" && (
               <>
@@ -1217,10 +1305,28 @@ export default function Home() {
                   <Button kind="secondary" size="sm" disabled={!recipeName.trim()} onClick={saveRecipe}>Save current process</Button>
                   {recipes.length > 0 && (
                     <>
-                      <Select id="saved-recipe" labelText="Saved recipes" size="sm" value={selectedRecipe} onChange={(event) => setSelectedRecipe(event.target.value)}>
-                        <SelectItem value="" text="Select a recipe" />
-                        {recipes.map((recipe) => <SelectItem key={recipe.name} value={recipe.name} text={recipe.name} />)}
-                      </Select>
+                      <ComboBox
+                        id="saved-recipe"
+                        items={recipes}
+                        itemToString={(recipe) => recipe?.name ?? ""}
+                        itemToElement={(recipe) => (
+                          <span className="recipe-option">
+                            <strong>{recipe.name}</strong>
+                            <span>{recipe.process.photoresist || "Unassigned resist"} · {recipe.process.thicknessNm ? `${recipe.process.thicknessNm} nm` : "thickness not set"} · {recipe.exposure} s</span>
+                          </span>
+                        )}
+                        selectedItem={recipes.find(({ name }) => name === selectedRecipe) ?? null}
+                        titleText="Saved recipes"
+                        placeholder="Search by recipe, resist or thickness"
+                        size="sm"
+                        shouldFilterItem={({ item, inputValue }) => !inputValue || [
+                          item.name,
+                          item.process.photoresist,
+                          item.process.thicknessNm,
+                          String(item.exposure),
+                        ].join(" ").toLocaleLowerCase().includes(inputValue.toLocaleLowerCase())}
+                        onChange={({ selectedItem }) => setSelectedRecipe(selectedItem?.name ?? "")}
+                      />
                       <div className="recipe-actions">
                         <Button kind="secondary" size="sm" disabled={!selectedRecipe} onClick={loadRecipe}>Load</Button>
                         <Button kind="danger--tertiary" size="sm" disabled={!selectedRecipe} onClick={deleteRecipe}>Delete</Button>
@@ -1234,16 +1340,30 @@ export default function Home() {
                 <Layer className="process-metadata" withBackground>
                   <h3>Process metadata</h3>
                   <div className="process-grid">
-                    <Select id="photoresist-library" className="full-width" labelText="405 nm photoresist library" helperText={`${PHOTORESISTS_405_NM.length} verified entries`} size="sm" value={photoresistPresetId} onChange={(event) => selectPhotoresistPreset(event.target.value)}>
-                        <SelectItem value="" text="Custom / not listed" />
-                        {PHOTORESIST_MANUFACTURERS_405_NM.map((manufacturer) => (
-                          <SelectItemGroup key={manufacturer} label={manufacturer}>
-                            {PHOTORESISTS_405_NM.filter((preset) => preset.manufacturer === manufacturer).map((preset) => (
-                              <SelectItem key={preset.id} value={preset.id} text={`${preset.name} · ${preset.tone}`} />
-                            ))}
-                          </SelectItemGroup>
-                        ))}
-                    </Select>
+                    <ComboBox
+                      id="photoresist-library"
+                      className="full-width"
+                      titleText="405 nm photoresist library"
+                      helperText={`${PHOTORESISTS_405_NM.length} verified entries · search manufacturer, resist or tone`}
+                      items={PHOTORESISTS_405_NM}
+                      selectedItem={photoresistPreset ?? null}
+                      itemToString={(preset) => preset ? `${preset.manufacturer} · ${preset.name}` : ""}
+                      itemToElement={(preset) => (
+                        <span className="recipe-option">
+                          <strong>{preset.manufacturer} · {preset.name}</strong>
+                          <span>{preset.tone} · {preset.referenceThicknessNm} nm · {preset.referenceRpm} rpm</span>
+                        </span>
+                      )}
+                      placeholder="Custom / not listed"
+                      size="sm"
+                      shouldFilterItem={({ item, inputValue }) => !inputValue || [
+                        item.manufacturer,
+                        item.name,
+                        item.tone,
+                        String(item.referenceThicknessNm),
+                      ].join(" ").toLocaleLowerCase().includes(inputValue.toLocaleLowerCase())}
+                      onChange={({ selectedItem }) => selectPhotoresistPreset(selectedItem?.id ?? "")}
+                    />
                     {photoresistPreset && (
                       <div className="photoresist-reference">
                         <InlineNotification
@@ -1275,22 +1395,42 @@ export default function Home() {
             )}
 
             {activePanel === "export" && sourceInfo && (
-              <Layer className="export-dock" withBackground>
-                <Button className="primary-action" kind="primary" size="lg" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportGoo()}>
-                  {busy ? "Processing…" : "Generate .GOO"}
-                </Button>
-                <div className="export-options">
-                  <Button className="secondary-action" kind="secondary" size="md" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportPng()}>
-                    Verification PNG
+              <>
+                <Layer className="export-dock" withBackground>
+                  <Button className="primary-action" kind="primary" size="lg" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportGoo()}>
+                    {busy ? "Processing…" : "Generate .GOO"}
                   </Button>
-                  <Button className="secondary-action bundle-action" kind="secondary" size="md" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportBundle()}>
-                    Experiment bundle (.zip)
-                  </Button>
-                  <Button className="secondary-action print-action" kind="tertiary" size="md" disabled={busy || !visibleShapes.length} onClick={() => window.print()}>
-                    Experimental run sheet
-                  </Button>
-                </div>
-              </Layer>
+                  <div className="export-options">
+                    <Button className="secondary-action" kind="secondary" size="md" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportPng()}>
+                      Verification PNG
+                    </Button>
+                    <Button className="secondary-action bundle-action" kind="secondary" size="md" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportBundle()}>
+                      Experiment bundle (.zip)
+                    </Button>
+                    <Button className="secondary-action print-action" kind="tertiary" size="md" disabled={busy || !visibleShapes.length} onClick={printRunSheet}>
+                      Experimental run sheet
+                    </Button>
+                  </div>
+                </Layer>
+                {exportReceipt && (
+                  <InlineNotification
+                    className="export-receipt"
+                    hideCloseButton
+                    lowContrast
+                    kind={exportReceipt.kind}
+                    title={exportReceipt.title}
+                    subtitle={exportReceipt.filename}
+                  >
+                    <dl>
+                      <div><dt>Time</dt><dd>{exportReceipt.timestamp}</dd></div>
+                      <div><dt>Format</dt><dd>{exportReceipt.format}</dd></div>
+                      <div><dt>Geometry</dt><dd>{exportReceipt.geometryCount.toLocaleString("en-US")} objects</dd></div>
+                      <div><dt>Transform</dt><dd>{exportReceipt.transform}</dd></div>
+                      <div><dt>Validation</dt><dd>{exportReceipt.validation}</dd></div>
+                    </dl>
+                  </InlineNotification>
+                )}
+              </>
             )}
 
             {activePanel && !sourceInfo && activePanel !== "input" && (
@@ -1309,6 +1449,7 @@ export default function Home() {
             <div className="preview-heading">
               <div><span className="live-dot" /> LCD PREVIEW</div>
               <p>153.36 × 77.76 mm <b>·</b> 8520 × 4320 px</p>
+              <Tag className="transform-summary" size="sm" type="gray">{transformSummary}</Tag>
             </div>
             <div className="preview-tools">
               <div className="zoom-tools" aria-label="Viewer scale">
@@ -1427,7 +1568,7 @@ export default function Home() {
           )}
           </>}
           <div className="lcd-shell">
-            <div ref={lcdGrid} className="lcd-grid" title="Use the mouse wheel or a trackpad pinch gesture to zoom">
+            <div ref={lcdGrid} className={`lcd-grid ${visibleShapes.length ? "" : "is-empty"}`} title="Use the mouse wheel or a trackpad pinch gesture to zoom">
               {visibleShapes.length ? (
                 <div
                   className="preview-surface"
@@ -1493,8 +1634,13 @@ export default function Home() {
               ) : (
                 <div className="empty-preview">
                   <div className="empty-pattern"><i /><i /><i /><i /><i /></div>
-                  <strong>LCD READY</strong>
-                  <p>The mask will appear here at physical scale.</p>
+                  <strong>Start a mask</strong>
+                  <p>Open a GDSII layout or try the UV example to preview it at physical scale.</p>
+                  <div className="empty-preview-actions">
+                    <FileUploaderButton id="empty-gds-file" accept={[".gds", ".gdsii"]} buttonKind="primary" size="sm" disabled={busy} labelText="Open GDS" onChange={(event) => void loadFile(event.target.files?.[0])} />
+                    <Button kind="secondary" size="sm" disabled={busy} onClick={() => void loadLogoExample()}>Try UV example</Button>
+                  </div>
+                  <small>GDS/GDSII · maximum 100 MB</small>
                 </div>
               )}
             </div>
@@ -1515,7 +1661,7 @@ export default function Home() {
               <div className="inspector-header">
                 <p>Selection</p>
                 <h2 id="pixel-inspector-title">Native 1:1 inspector</h2>
-                <IconButton className="close-panel" kind="ghost" size="sm" label="Close pixel inspector" align="bottom-end" onClick={() => setInspectorOpen(false)}><Close /></IconButton>
+                <IconButton className="close-panel" kind="ghost" size="lg" label="Close pixel inspector" align="bottom-end" onClick={() => setInspectorOpen(false)}><Close /></IconButton>
               </div>
               <div className="inspector-content">
                 <canvas ref={inspector} aria-label={`Native LCD pixels around ${inspection.x}, ${inspection.y}`} />

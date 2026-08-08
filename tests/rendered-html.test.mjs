@@ -15,7 +15,9 @@ test("exports the GDS2GOO application shell", async () => {
   assert.match(html, /Elegoo Mars 4/);
   assert.match(html, /Needs input/);
   for (const section of ["Input", "Mask", "Process", "Export"]) assert.match(html, new RegExp(`>${section}<`));
-  assert.match(html, /LCD READY/);
+  assert.match(html, /Start a mask/);
+  assert.match(html, /Open GDS/);
+  assert.match(html, /Try UV example/);
   assert.match(source, /Generate \.GOO/);
   assert.match(source, /Zoom/);
   assert.match(source, /Pixel grid/);
@@ -29,6 +31,10 @@ test("exports the GDS2GOO application shell", async () => {
   assert.match(source, /Full screen/);
   assert.match(source, /Step-and-repeat/);
   assert.match(source, /Local process recipes/);
+  assert.match(source, /Search by recipe, resist or thickness/);
+  assert.match(source, /className="mobile-panel-preview"/);
+  assert.match(source, /className="transform-summary"/);
+  assert.match(source, /Export generated/);
   assert.match(source, /Custom circular substrate/);
   assert.match(source, /2-inch wafer · Ø50\.8 mm/);
   assert.match(source, /Microscope slide · 75 × 25 mm/);
@@ -50,7 +56,7 @@ test("exports the GDS2GOO application shell", async () => {
   assert.match(source, /className="workflow-navigation"/);
   assert.match(source, /data-panel-open/);
   assert.doesNotMatch(source, /<(?:button|input|select|textarea|details|summary)\b/);
-  for (const component of ["Button", "NumberInput", "TextInput", "Select", "Checkbox", "Toggle", "Accordion", "FileUploaderDropContainer", "InlineNotification", "Layer", "Link"]) {
+  for (const component of ["Button", "NumberInput", "TextInput", "Select", "ComboBox", "Checkbox", "Toggle", "Accordion", "FileUploaderDropContainer", "FileUploaderButton", "InlineNotification", "Layer", "Link", "Tag"]) {
     assert.match(source, new RegExp(`<${component}\\b`));
   }
   assert.match(tokens, /--viewer-surface:/);
