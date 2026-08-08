@@ -12,7 +12,9 @@ import {
   Header,
   HeaderName,
   IconButton,
+  InlineNotification,
   Layer,
+  Link,
   NumberInput,
   Select,
   SelectItem,
@@ -212,7 +214,7 @@ function drawResistResponse(
   canvas.height = height;
   const context = canvas.getContext("2d", { alpha: false });
   if (!context) throw new Error("The browser could not create the resist preview canvas.");
-  context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--color-viewer-deep").trim();
+  context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--viewer-surface-deep").trim();
   context.fillRect(0, 0, width, height);
   context.filter = blurPixels > 0 ? `blur(${blurPixels}px)` : "none";
   context.drawImage(source, 0, 0);
@@ -492,7 +494,7 @@ export default function Home() {
       pixelMicrometers: MARS_4_9K.pixelMicrometers,
     });
     const context = drawBinaryPixels(inspector.current, pixels, INSPECTOR_SIZE, INSPECTOR_SIZE);
-    context.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--color-accent").trim();
+    context.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--viewer-accent").trim();
     context.lineWidth = 0.5;
     context.strokeRect(inspection.x - offsetX + 0.25, inspection.y - offsetY + 0.25, 0.5, 0.5);
   }, [repeatedShapes, settings, inspection, exportedSubstrateShapes]);
@@ -1084,15 +1086,20 @@ export default function Home() {
                       {model.topCells.map((cell) => <SelectItem key={cell} value={cell} text={cell} />)}
                     </Select>}
                     {model && (
-                      <div className={`compatibility-report ${model.compatibility.warnings.length ? "has-warnings" : ""}`}>
-                        <div><strong>GDS compatibility</strong><span>{model.compatibility.warnings.length ? `${model.compatibility.warnings.length} warning(s)` : "Ready"}</span></div>
+                      <InlineNotification
+                        className="compatibility-notification"
+                        hideCloseButton
+                        kind={model.compatibility.warnings.length ? "warning" : "success"}
+                        lowContrast
+                        title={model.compatibility.warnings.length ? `GDS compatibility · ${model.compatibility.warnings.length} warning(s)` : "GDS compatibility · Ready"}
+                      >
                         <p>
                           {model.compatibility.elementCounts.boundaries} BOUNDARY · {model.compatibility.elementCounts.boxes} BOX · {model.compatibility.elementCounts.paths} PATH · {model.compatibility.elementCounts.references} REF
                         </p>
                         {model.compatibility.warnings.length ? (
                           <ul>{model.compatibility.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
-                        ) : <small>No unsupported exposure geometry detected.</small>}
-                      </div>
+                        ) : <p>No unsupported exposure geometry detected.</p>}
+                      </InlineNotification>
                     )}
                     <fieldset>
                       <legend>Layers to expose</legend>
@@ -1137,10 +1144,13 @@ export default function Home() {
                       </Accordion>
                     )}
                     {sourceInfo?.kind === "generated-diagnostic" && (
-                      <div className="diagnostic-note">
-                        <strong>How to read it</strong>
-                        <p>Corner blocks increase clockwise: 1 top-left, 2 top-right, 3 bottom-right and 4 bottom-left. The long arrows indicate +X and +Y; the lower bar is 10.008 mm.</p>
-                      </div>
+                      <InlineNotification
+                        hideCloseButton
+                        kind="info"
+                        lowContrast
+                        subtitle="Corner blocks increase clockwise: 1 top-left, 2 top-right, 3 bottom-right and 4 bottom-left. The long arrows indicate +X and +Y; the lower bar is 10.008 mm."
+                        title="How to read it"
+                      />
                     )}
                   </div>
                 )}
@@ -1182,13 +1192,13 @@ export default function Home() {
                   </AccordionItem>
                 </Accordion>
                 {calibrationMode && (
-                  <div className="calibration-series">
+                  <Layer className="calibration-series" withBackground>
                     <TextInput id="calibration-series" labelText="Exposure series" helperText="Seconds · comma-separated" size="sm" value={calibrationSeries} onChange={(event) => setCalibrationSeries(event.target.value)} />
                     <Button kind="secondary" size="sm" disabled={busy || outsideScreen} onClick={() => void exportCalibrationSeries()}>
                       Download calibration bundle (.zip)
                     </Button>
                     <p>Includes every GOO exposure, a 9K PNG and the run manifest.</p>
-                  </div>
+                  </Layer>
                 )}
                 <div className="toggle-row">
                   <Button kind={settings.mirrorX ? "primary" : "tertiary"} size="sm" aria-pressed={settings.mirrorX} onClick={() => setSettings({ ...settings, mirrorX: !settings.mirrorX })}>↔ Mirror X</Button>
@@ -1221,7 +1231,7 @@ export default function Home() {
                   </AccordionItem>
                 </Accordion>
 
-                <div className="process-metadata">
+                <Layer className="process-metadata" withBackground>
                   <h3>Process metadata</h3>
                   <div className="process-grid">
                     <Select id="photoresist-library" className="full-width" labelText="405 nm photoresist library" helperText={`${PHOTORESISTS_405_NM.length} verified entries`} size="sm" value={photoresistPresetId} onChange={(event) => selectPhotoresistPreset(event.target.value)}>
@@ -1234,12 +1244,20 @@ export default function Home() {
                           </SelectItemGroup>
                         ))}
                     </Select>
-                    {photoresistPreset && <aside className="photoresist-reference" aria-live="polite">
-                      <strong>{photoresistPreset.manufacturer} · {photoresistPreset.name}</strong>
-                      <span>{photoresistPreset.tone} · 405 nm documented · {photoresistPreset.referenceThicknessNm} nm at {photoresistPreset.referenceRpm} rpm.</span>
-                      <span>{photoresistPreset.evidence}. This is a spin reference, not an exposure-dose prescription.</span>
-                      <a href={photoresistPreset.sourceUrl} target="_blank" rel="noreferrer">Open manufacturer source ↗</a>
-                    </aside>}
+                    {photoresistPreset && (
+                      <div className="photoresist-reference">
+                        <InlineNotification
+                          hideCloseButton
+                          kind="info"
+                          lowContrast
+                          title={`${photoresistPreset.manufacturer} · ${photoresistPreset.name}`}
+                        >
+                          <p>{photoresistPreset.tone} · 405 nm documented · {photoresistPreset.referenceThicknessNm} nm at {photoresistPreset.referenceRpm} rpm.</p>
+                          <p>{photoresistPreset.evidence}. This is a spin reference, not an exposure-dose prescription.</p>
+                        </InlineNotification>
+                        <Link href={photoresistPreset.sourceUrl} target="_blank" rel="noreferrer">Open manufacturer source ↗</Link>
+                      </div>
+                    )}
                     <TextInput id="process-photoresist" labelText="Photoresist" size="sm" value={processMetadata.photoresist} placeholder="e.g. AZ1505"
                       onChange={(event) => { setPhotoresistPresetId(""); setProcessMetadata({ ...processMetadata, photoresist: event.target.value }); }} />
                     <NumberInput id="process-thickness" label="Thickness · nm" size="sm" min={0} step={1} value={processMetadata.thicknessNm} allowEmpty placeholder="e.g. 600"
@@ -1252,12 +1270,12 @@ export default function Home() {
                   <TextArea id="process-notes" labelText="Notes" rows={2} value={processMetadata.notes} placeholder="Substrate, contact mode, batch…"
                     onChange={(event) => setProcessMetadata({ ...processMetadata, notes: event.target.value })} />
                   <p>Saved locally in the companion <code>.run.json</code> file.</p>
-                </div>
+                </Layer>
               </>
             )}
 
             {activePanel === "export" && sourceInfo && (
-              <div className="export-dock">
+              <Layer className="export-dock" withBackground>
                 <Button className="primary-action" kind="primary" size="lg" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportGoo()}>
                   {busy ? "Processing…" : "Generate .GOO"}
                 </Button>
@@ -1272,7 +1290,7 @@ export default function Home() {
                     Experimental run sheet
                   </Button>
                 </div>
-              </div>
+              </Layer>
             )}
 
             {activePanel && !sourceInfo && activePanel !== "input" && (
@@ -1331,7 +1349,7 @@ export default function Home() {
             </div>
           </div>
           {showResistResponse && visibleShapes.length > 0 && (
-            <div className="exposure-controls" aria-label="Resist exposure model">
+            <Layer className="exposure-controls" withBackground aria-label="Resist exposure model">
               <Select id="viewer-photoresist" labelText="Photoresist" helperText="405 nm" size="sm" value={photoresistPresetId} onChange={(event) => selectPhotoresistPreset(event.target.value)}>
                   <SelectItem value="" text="Generic / unassigned" />
                   {PHOTORESIST_MANUFACTURERS_405_NM.map((manufacturer) => (
@@ -1357,12 +1375,12 @@ export default function Home() {
                 <span>{responseIrradianceIsEstimated ? "10 mW/cm² · ESTIMATED FROM PAPER" : photoresistPreset ? responseProfileIsSaved ? "CALIBRATION SAVED" : savedResponseProfile ? "UNSAVED CHANGES" : photoresistPreset.documentedContrast ? "DOCUMENTED γ · CALIBRATION NEEDED" : "CALIBRATION NEEDED" : "NO RESIST ASSIGNED"}</span>
                 <Button kind="tertiary" size="sm" disabled={!photoresistPreset || responseProfileIsSaved} onClick={saveResponseProfile}>Save calibration</Button>
               </div>
-            </div>
+            </Layer>
           )}
           {substrateTemplate && (
             <Accordion className="viewer-settings" size="sm">
               <AccordionItem title={<><span>Substrate &amp; alignment</span><small>{substrateTemplate.label}</small></>}>
-              <div className="substrate-controls" aria-label="Substrate configuration">
+              <Layer className="substrate-controls" withBackground aria-label="Substrate configuration">
               <fieldset className="substrate-group substrate-geometry">
                 <legend>Wafer geometry</legend>
               {substrateTemplateId.startsWith("custom-") && (
@@ -1403,7 +1421,7 @@ export default function Home() {
                 onChange={(_event, { value }) => { const number = Number(value); if (number >= 36 && number <= 1000) setSubstrateLineWidth(number); }} />
               </fieldset>
               <p className="substrate-note">Alignment marks are exported when selected. The dashed inner guide is the usable area and is never exported.</p>
-              </div>
+              </Layer>
               </AccordionItem>
             </Accordion>
           )}

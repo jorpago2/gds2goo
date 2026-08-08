@@ -32,7 +32,7 @@ test("exports the GDS2GOO application shell", async () => {
   assert.match(source, /Custom circular substrate/);
   assert.match(source, /2-inch wafer · Ø50\.8 mm/);
   assert.match(source, /Microscope slide · 75 × 25 mm/);
-  assert.match(html, /href="https:\/\/jorpago2\.github\.io\/"/);
+  assert.doesNotMatch(source, /All tools|href="https:\/\/jorpago2\.github\.io\/"/);
   assert.match(source, /calibration pattern/);
   assert.match(html, /id="workspace"/);
   assert.match(source, /Dry LCD exposure/);
@@ -41,7 +41,7 @@ test("exports the GDS2GOO application shell", async () => {
   assert.match(source, /className="export-dock"/);
   const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
   const tokens = await readFile(new URL("../tokens.css", import.meta.url), "utf8");
-  assert.match(styles, /macrostructure: Workbench/);
+  assert.match(styles, /Carbon g10 owns the application UI/);
   assert.match(styles, /@import "\.\.\/tokens\.css"/);
   const carbon = await readFile(new URL("../src/carbon.scss", import.meta.url), "utf8");
   assert.match(carbon, /@use ["']@carbon\/react["']/);
@@ -50,10 +50,11 @@ test("exports the GDS2GOO application shell", async () => {
   assert.match(source, /className="workflow-navigation"/);
   assert.match(source, /data-panel-open/);
   assert.doesNotMatch(source, /<(?:button|input|select|textarea|details|summary)\b/);
-  for (const component of ["Button", "NumberInput", "TextInput", "Select", "Checkbox", "Toggle", "Accordion", "FileUploaderDropContainer", "Layer"]) {
+  for (const component of ["Button", "NumberInput", "TextInput", "Select", "Checkbox", "Toggle", "Accordion", "FileUploaderDropContainer", "InlineNotification", "Layer", "Link"]) {
     assert.match(source, new RegExp(`<${component}\\b`));
   }
-  assert.match(tokens, /--color-accent:/);
+  assert.match(tokens, /--viewer-surface:/);
+  assert.doesNotMatch(tokens, /--color-(?:paper|accent|success|warning|error)|--radius-card|--shadow-card/);
   assert.doesNotMatch(styles, /#[0-9a-f]{3,8}|rgba?\(|100vw|overflow-x:\s*hidden/i);
   assert.match(source, /Printer orientation check/);
   assert.match(source, /Restore \.run\.json/);

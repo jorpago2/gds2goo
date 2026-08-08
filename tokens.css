@@ -1,104 +1,34 @@
 :root {
-  --color-paper: oklch(97% 0.012 75);
-  --color-paper-2: oklch(94% 0.014 75);
-  --color-paper-3: oklch(91% 0.016 75);
-  --color-surface: oklch(98.5% 0.009 75);
-  --color-rule: oklch(85% 0.014 75);
-  --color-rule-2: oklch(70% 0.018 72);
-  --color-muted: oklch(45% 0.014 68);
-  --color-neutral: oklch(35% 0.014 68);
-  --color-ink-2: oklch(27% 0.012 65);
-  --color-ink: oklch(17% 0.012 62);
-  --color-accent: oklch(62% 0.22 39);
-  --color-accent-deep: oklch(51% 0.19 36);
-  --color-accent-soft: oklch(95% 0.035 48);
-  --color-accent-ink: oklch(98% 0.01 75);
-  --color-focus: oklch(45% 0.17 245);
-  --color-success: oklch(55% 0.14 145);
-  --color-success-soft: oklch(95% 0.035 145);
-  --color-warning: oklch(62% 0.16 72);
-  --color-warning-soft: oklch(96% 0.04 85);
-  --color-error: oklch(52% 0.2 30);
-  --color-error-soft: oklch(95% 0.04 35);
-  --color-viewer: oklch(16% 0.016 135);
-  --color-viewer-deep: oklch(10% 0.018 145);
-  --color-viewer-raised: oklch(22% 0.014 125);
-  --color-viewer-muted: oklch(68% 0.018 95);
-  --color-viewer-grid: oklch(88% 0.18 115);
-  --color-viewer-label: oklch(90% 0.07 88);
-  --color-print-paper: oklch(99% 0.005 75);
-  --color-print-ink: oklch(12% 0.008 65);
-  --color-print-rule: oklch(48% 0.008 70);
-
-  --font-display: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  /* Carbon owns application colour, type, focus, shape and elevation. */
   --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
   --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
 
+  /* Carbon-aligned type and spacing used by the custom workbench layout. */
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-base: 1rem;
-  --text-md: 1.25rem;
-  --text-lg: 1.5625rem;
-  --text-xl: 1.953rem;
-  --text-2xl: 2.441rem;
-  --text-display: clamp(2.2rem, 3vw + 1rem, 4.25rem);
-
   --space-3xs: 0.25rem;
   --space-2xs: 0.5rem;
   --space-xs: 0.75rem;
   --space-sm: 1rem;
   --space-md: 1.5rem;
   --space-lg: 2rem;
-  --space-xl: 3rem;
-  --space-2xl: 4.5rem;
-  --space-3xl: 7rem;
-
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --dur-micro: 120ms;
-  --dur-short: 220ms;
-  --dur-long: 420ms;
   --rule-hair: 1px;
   --rule-fine: 2px;
-  --radius-card: 0.875rem;
-  --radius-pill: 999px;
-  --radius-input: 0.5rem;
-  --shadow-card: 0 1px 2px oklch(20% 0.01 65 / 0.05);
-  --page-gutter: clamp(1rem, 3vw, 3rem);
-  --control-height: 2.75rem;
-  --z-base: 1;
   --z-raised: 10;
   --z-sticky: 200;
-}
 
-/* Carbon g10 governs UI surfaces, type, focus and shape. */
-:root,
-.cds--g10 {
-  --color-paper: var(--cds-background);
-  --color-paper-2: var(--cds-layer-01);
-  --color-paper-3: var(--cds-layer-02);
-  --color-surface: var(--cds-layer);
-  --color-surface-raised: var(--cds-field-01);
-  --color-ink: var(--cds-text-primary);
-  --color-ink-2: var(--cds-text-secondary);
-  --color-muted: var(--cds-text-secondary);
-  --color-neutral: var(--cds-icon-primary);
-  --color-rule: var(--cds-border-subtle);
-  --color-rule-2: var(--cds-border-strong);
-  --color-accent: var(--cds-link-primary);
-  --color-accent-deep: var(--cds-link-primary-hover);
-  --color-accent-soft: var(--cds-layer-accent-01);
-  --color-accent-ink: var(--cds-text-on-color);
-  --color-focus: var(--cds-focus);
-  --color-danger: var(--cds-support-error);
-  --color-warning: var(--cds-support-warning);
-  --color-success: var(--cds-support-success);
-  --font-display: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
-  --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
-  --radius-card: 0;
-  --radius-pill: 0;
-  --radius-input: 0;
-  --shadow-raised: 0 2px 6px rgb(0 0 0 / 0.16);
+  /* Scientific viewer: the only intentionally non-Carbon screen surface. */
+  --viewer-surface: oklch(16% 0.016 135);
+  --viewer-surface-deep: oklch(10% 0.018 145);
+  --viewer-surface-raised: oklch(22% 0.014 125);
+  --viewer-text-muted: oklch(68% 0.018 95);
+  --viewer-grid: oklch(88% 0.18 115);
+  --viewer-label: oklch(90% 0.07 88);
+  --viewer-accent: var(--cds-link-primary);
+
+  /* Printed run sheet is independent of the screen theme. */
+  --print-paper: oklch(99% 0.005 75);
+  --print-ink: oklch(12% 0.008 65);
+  --print-rule: oklch(48% 0.008 70);
 }
