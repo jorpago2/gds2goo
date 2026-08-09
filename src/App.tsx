@@ -35,6 +35,7 @@ import {
   parseGds,
 } from "@/lib/gds.js";
 import { Chemistry, Close, Document, Download, Grid as GridIcon } from "@carbon/react/icons";
+import { ExportReceipt as SharedExportReceipt } from "@jorpago2/scientific-ui";
 import { buildGooFile, encodeBinaryLayer, MARS_4_9K, validateGooFile } from "@/lib/goo.js";
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "@/lib/calibration.js";
 import { fitsSubstrateArea, repeatShapes, transformGuideShapes } from "@/lib/experiment.js";
@@ -1413,13 +1414,13 @@ export default function Home() {
                   </div>
                 </Layer>
                 {exportReceipt && (
-                  <InlineNotification
+                  <SharedExportReceipt
                     className="export-receipt"
-                    hideCloseButton
-                    lowContrast
                     kind={exportReceipt.kind}
                     title={exportReceipt.title}
-                    subtitle={exportReceipt.filename}
+                    fileName={exportReceipt.filename}
+                    format={exportReceipt.format}
+                    destination={exportReceipt.timestamp}
                   >
                     <dl>
                       <div><dt>Time</dt><dd>{exportReceipt.timestamp}</dd></div>
@@ -1428,7 +1429,7 @@ export default function Home() {
                       <div><dt>Transform</dt><dd>{exportReceipt.transform}</dd></div>
                       <div><dt>Validation</dt><dd>{exportReceipt.validation}</dd></div>
                     </dl>
-                  </InlineNotification>
+                  </SharedExportReceipt>
                 )}
               </>
             )}
@@ -1442,7 +1443,7 @@ export default function Home() {
         </Layer>
       )}
 
-      <main className="app-result" data-empty={!sourceInfo}>
+      <section className="app-result" data-empty={!sourceInfo} aria-label="Mask preview and export">
         <section ref={previewPanel} className="preview-panel">
           {sourceInfo && <>
           <div className="preview-toolbar">
@@ -1653,7 +1654,7 @@ export default function Home() {
             )}
           </div>
         </section>
-      </main>
+      </section>
 
       <Layer as="aside" id="pixel-inspector" className={`app-inspector ${showInspector ? "open" : ""}`} withBackground aria-labelledby="pixel-inspector-title" hidden={!showInspector}>
          {showInspector ? (

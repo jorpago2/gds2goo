@@ -1,5 +1,9 @@
 # Design — GDS2GOO
 
+## Shared contract (normative)
+
+This application consumes `@jorpago2/scientific-ui` and follows the [shared interface contract](https://github.com/jorpago2/jorpago2.github.io/blob/main/docs/interface-contract.md). The LCD viewer and print run sheet remain the only visual exceptions.
+
 This document is the visual contract for the GDS-to-GOO laboratory workspace. Scientific behaviour is independent from it.
 
 ## System of record

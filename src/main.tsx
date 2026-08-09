@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { GlobalTheme } from "@carbon/react";
 import "./carbon.scss";
+import "@jorpago2/scientific-ui/styles.css";
 import "./styles.css";
 import App from "./App";
 
