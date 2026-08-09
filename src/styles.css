@@ -283,24 +283,19 @@ h1, h2, h3 { min-width: 0; overflow-wrap: anywhere; }
   main.app-shell-content[data-panel-open="true"],
   main.app-shell-content[data-inspector-open="true"],
   main.app-shell-content[data-panel-open="true"][data-inspector-open="true"] {
-    block-size: calc(100dvh - var(--app-header-height) - var(--scientific-ui-mobile-nav-block-size));
+    block-size: calc(100dvh - var(--app-header-height) - var(--scientific-ui-mobile-nav-total-block-size));
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: "main" "status";
-    margin-block-end: var(--scientific-ui-mobile-nav-block-size);
+    margin-block-end: var(--scientific-ui-mobile-nav-total-block-size);
   }
-  .workflow-navigation { position: fixed; z-index: var(--z-sticky); inset-inline: 0; inset-block-end: 0; inline-size: 100%; block-size: var(--scientific-ui-mobile-nav-block-size); }
-  .app-panel, .app-inspector { inset: var(--app-header-height) 0 var(--scientific-ui-mobile-nav-block-size); inline-size: 100%; max-inline-size: none; border: 0; box-shadow: none; }
+  .workflow-navigation { position: fixed; z-index: var(--z-sticky); inset-inline: 0; inset-block-end: 0; inline-size: 100%; block-size: var(--scientific-ui-mobile-nav-total-block-size); }
+  .app-panel, .app-inspector { inset: var(--app-header-height) 0 var(--scientific-ui-mobile-nav-total-block-size); inline-size: 100%; max-inline-size: none; border: 0; box-shadow: none; }
   .app-shell-content[data-panel-open="true"] .app-result,
   .app-shell-content[data-inspector-open="true"] .app-result { margin-inline: 0; }
 }
 
 @media (max-width: 48rem) {
   :root { --app-status-height: 3.5rem; }
-  .mobile-panel-preview { flex: 0 0 auto; display: grid; grid-template-columns: minmax(8rem, 2fr) minmax(0, 3fr); align-items: center; gap: var(--space-sm); padding: var(--space-xs) var(--space-sm); border-block-end: 1px solid var(--cds-border-subtle); background: var(--cds-layer); }
-  .mobile-panel-preview > div { min-width: 0; display: grid; gap: var(--space-2xs); }
-  .mobile-panel-preview strong { font-size: var(--text-sm); }
-  .mobile-panel-preview span { overflow: hidden; color: var(--cds-text-secondary); font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
-  .mobile-panel-preview canvas { display: block; inline-size: 100%; block-size: auto; aspect-ratio: 8520 / 4320; background: var(--viewer-surface-deep); image-rendering: pixelated; }
   .app-result { padding: var(--space-sm); }
   .app-result[data-empty="true"] .preview-panel { min-block-size: 100%; display: grid; align-content: center; }
   .app-status { grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-xs); padding-inline: var(--space-xs); }
