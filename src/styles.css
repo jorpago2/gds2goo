@@ -16,65 +16,6 @@ body { margin: 0; background: var(--cds-background); color: var(--cds-text-prima
 a { -webkit-tap-highlight-color: transparent; }
 .visually-hidden { position: absolute; inline-size: 1px; block-size: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
-.app-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(16rem, 36rem) minmax(0, 1fr);
-  align-items: center;
-  block-size: var(--app-header-height);
-  background: var(--cds-layer-01);
-  border-block-end: 1px solid var(--cds-border-subtle);
-}
-.header-brand {
-  min-width: 0;
-  min-block-size: var(--app-header-height);
-  gap: var(--space-sm);
-  padding-inline: var(--space-sm);
-  color: var(--cds-text-primary);
-  font-family: var(--font-body);
-  letter-spacing: -.025em;
-}
-.header-brand-mark {
-  display: grid;
-  place-items: center;
-  flex: 0 0 2rem;
-  inline-size: 2rem;
-  block-size: 2rem;
-  color: var(--cds-text-on-color);
-  background: var(--cds-text-primary);
-  font: 600 var(--text-xs)/1 var(--font-mono);
-}
-.header-brand-copy { min-width: 0; display: grid; gap: var(--space-3xs); }
-.header-brand-copy strong,
-.header-brand-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.header-brand-copy strong { font-size: var(--text-sm); }
-.header-brand-copy small { color: var(--cds-text-secondary); font-size: var(--text-xs); font-weight: 400; letter-spacing: 0; }
-.header-context {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  justify-content: center;
-  padding-inline: var(--space-sm);
-  color: var(--cds-text-secondary);
-  font-size: var(--text-xs);
-}
-.context-title, .status-chip { margin: 0; }
-.context-title {
-  min-width: 0;
-  max-width: min(36rem, 60vw);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--cds-text-primary);
-  font-weight: 600;
-}
-.status-chip { display: inline-flex; align-items: center; gap: var(--space-2xs); flex: 0 0 auto; white-space: nowrap; }
-.status-chip::before { content: ""; inline-size: .5rem; block-size: .5rem; border-radius: 50%; background: currentColor; }
-.status-chip--ready { color: var(--cds-support-success); }
-.status-chip--running { color: var(--cds-interactive); }
-.status-chip--warning { color: var(--cds-support-warning); }
-.status-chip--error { color: var(--cds-support-error); }
-.status-chip--idle { color: var(--cds-text-secondary); }
 #root main.app-shell-content {
   max-inline-size: none;
   inline-size: 100%;
@@ -226,7 +167,6 @@ h1, h2, h3 { min-width: 0; overflow-wrap: anywhere; }
   .template-control { grid-column: 1 / -1; }
 }
 .context-label { color: var(--cds-text-secondary); font-family: var(--font-mono); text-transform: uppercase; white-space: nowrap; }
-.header-balance { min-inline-size: 0; }
 
 @container (max-width: 56.25rem) {
   .preview-tools { grid-template-columns: minmax(0, 1fr); }
@@ -246,7 +186,6 @@ h1, h2, h3 { min-width: 0; overflow-wrap: anywhere; }
 }
 
 @media (max-width: 35rem) {
-  .status-chip { font-size: var(--text-xs); max-width: 13ch; }
   .preview-heading { display: grid; justify-content: start; }
   .preview-tools { width: 100%; grid-template-columns: 1fr; justify-content: stretch; }
   .zoom-tools, .preview-mode-tools { flex-wrap: wrap; border: 0; padding: 0; }
@@ -359,13 +298,6 @@ h1, h2, h3 { min-width: 0; overflow-wrap: anywhere; }
 
 @media (max-width: 48rem) {
   :root { --app-status-height: 3.5rem; }
-  .app-header { grid-template-columns: 3rem minmax(0, 1fr) 3rem; }
-  .app-header .header-brand { min-inline-size: 3rem; inline-size: 3rem; max-inline-size: 3rem; justify-content: center; padding-inline: 0; overflow: hidden; }
-  .header-brand-copy,
-  .context-label,
-  .context-title { display: none; }
-  .header-context { justify-content: center; padding-inline: var(--space-2xs); }
-  .status-chip { max-inline-size: 16ch; overflow: hidden; text-overflow: ellipsis; }
   .mobile-panel-preview { flex: 0 0 auto; display: grid; grid-template-columns: minmax(8rem, 2fr) minmax(0, 3fr); align-items: center; gap: var(--space-sm); padding: var(--space-xs) var(--space-sm); border-block-end: 1px solid var(--cds-border-subtle); background: var(--cds-layer); }
   .mobile-panel-preview > div { min-width: 0; display: grid; gap: var(--space-2xs); }
   .mobile-panel-preview strong { font-size: var(--text-sm); }

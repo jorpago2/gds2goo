@@ -10,8 +10,6 @@ import {
   Content,
   FileUploaderButton,
   FileUploaderDropContainer,
-  Header,
-  HeaderName,
   IconButton,
   InlineNotification,
   Layer,
@@ -35,7 +33,7 @@ import {
   parseGds,
 } from "@/lib/gds.js";
 import { Chemistry, Close, Document, Download, Grid as GridIcon } from "@carbon/react/icons";
-import { ExportReceipt as SharedExportReceipt, ScientificToolRail } from "@jorpago2/scientific-ui";
+import { ExportReceipt as SharedExportReceipt, ScientificHeader, ScientificToolRail } from "@jorpago2/scientific-ui";
 import { buildGooFile, encodeBinaryLayer, MARS_4_9K, validateGooFile } from "@/lib/goo.js";
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "@/lib/calibration.js";
 import { fitsSubstrateArea, repeatShapes, transformGuideShapes } from "@/lib/experiment.js";
@@ -321,7 +319,7 @@ export default function Home() {
   const [responseIrradianceMwCm2, setResponseIrradianceMwCm2] = useState(String(PAPER_IRRADIANCE_ESTIMATE_MW_CM2));
   const [responseIrradianceIsEstimated, setResponseIrradianceIsEstimated] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [activePanel, setActivePanel] = useState<"input" | "mask" | "process" | "export" | null>(null);
+  const [activePanel, setActivePanel] = useState<"input" | "mask" | "process" | "export" | null>("input");
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [substrateTemplateId, setSubstrateTemplateId] = useState("wafer-2");
   const [waferMarker, setWaferMarker] = useState<"round" | "flat" | "notch">("flat");
@@ -1102,27 +1100,19 @@ export default function Home() {
 
   return (
     <>
-      <Header className="app-header scientific-app-header" aria-label="GDS2GOO">
-        <HeaderName className="header-brand" href="#workspace" prefix="">
-          <span className="header-brand-mark scientific-app-header__brand-mark" aria-hidden="true">G</span>
-          <span className="header-brand-copy">
-            <strong>GDS2GOO</strong>
-            <small>Mask conversion</small>
-          </span>
-        </HeaderName>
-        <div className="header-context" aria-label="Current workspace">
-          <span className="context-label">Current workspace</span>
-          <p className="context-title">{sourceInfo ? `${topCell || "GDS"} · ${fileName || "untitled"}` : "No file loaded"}</p>
-          <span
-            className={`status-chip ${outsideScreen ? "status-chip--error" : outsideSubstrate ? "status-chip--warning" : busy ? "status-chip--running" : sourceInfo ? "status-chip--ready" : "status-chip--idle"}`}
-            role="status"
-            aria-live="polite"
-          >
-            {workspaceStatus}
-          </span>
-        </div>
-        <span className="header-balance" aria-hidden="true" />
-      </Header>
+      <ScientificHeader
+        aria-label="GDS2GOO"
+        product="GDS2GOO"
+        productMark="G"
+        descriptor="Mask conversion"
+        href="#workspace"
+        contextLabel="Current workspace"
+        context={sourceInfo ? `${topCell || "GDS"} · ${fileName || "untitled"}` : "No file loaded"}
+        status={{
+          state: outsideScreen || outsideSubstrate ? "warning" : busy ? "running" : sourceInfo ? "ready" : "needs-input",
+          label: workspaceStatus,
+        }}
+      />
 
       <Content
         id="workspace"
