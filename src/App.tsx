@@ -35,7 +35,7 @@ import {
   parseGds,
 } from "@/lib/gds.js";
 import { Chemistry, Close, Document, Download, Grid as GridIcon } from "@carbon/react/icons";
-import { ExportReceipt as SharedExportReceipt } from "@jorpago2/scientific-ui";
+import { ExportReceipt as SharedExportReceipt, ScientificToolRail } from "@jorpago2/scientific-ui";
 import { buildGooFile, encodeBinaryLayer, MARS_4_9K, validateGooFile } from "@/lib/goo.js";
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "@/lib/calibration.js";
 import { fitsSubstrateArea, repeatShapes, transformGuideShapes } from "@/lib/experiment.js";
@@ -1060,11 +1060,6 @@ export default function Home() {
     });
   }
 
-  function togglePanel(panel: "input" | "mask" | "process" | "export") {
-    setActivePanel((current) => current === panel ? null : panel);
-    window.requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
-  }
-
   useEffect(() => {
     if (!activePanel && !inspectorOpen) return;
     const handleEscape = (event: KeyboardEvent) => {
@@ -1128,12 +1123,15 @@ export default function Home() {
         data-inspector-open={showInspector}
       >
         <h1 className="visually-hidden">GDS2GOO scientific mask conversion workspace</h1>
-        <nav className="workflow-navigation" aria-label="Configuration tools">
-          <Button id="workflow-input" kind="ghost" size="md" renderIcon={Document} aria-controls="configuration-panel" aria-expanded={activePanel === "input"} className={activePanel === "input" ? "active" : ""} onClick={() => togglePanel("input")}>Input</Button>
-          <Button id="workflow-mask" kind="ghost" size="md" renderIcon={GridIcon} aria-controls="configuration-panel" aria-expanded={activePanel === "mask"} className={activePanel === "mask" ? "active" : ""} onClick={() => togglePanel("mask")}>Mask</Button>
-          <Button id="workflow-process" kind="ghost" size="md" renderIcon={Chemistry} aria-controls="configuration-panel" aria-expanded={activePanel === "process"} className={activePanel === "process" ? "active" : ""} onClick={() => togglePanel("process")}>Process</Button>
-          <Button id="workflow-export" kind="ghost" size="md" renderIcon={Download} aria-controls="configuration-panel" aria-expanded={activePanel === "export"} className={activePanel === "export" ? "active" : ""} onClick={() => togglePanel("export")}>Export</Button>
-        </nav>
+        <ScientificToolRail className="workflow-navigation" label="Configuration tools" activeId={activePanel} onChange={(id) => {
+          setActivePanel(id as "input" | "mask" | "process" | "export" | null);
+          window.requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+        }} items={[
+          { id: "input", label: "Input", icon: <Document size={20} />, controlsId: "configuration-panel" },
+          { id: "mask", label: "Mask", icon: <GridIcon size={20} />, controlsId: "configuration-panel" },
+          { id: "process", label: "Process", icon: <Chemistry size={20} />, controlsId: "configuration-panel" },
+          { id: "export", label: "Export", icon: <Download size={20} />, controlsId: "configuration-panel" },
+        ]} />
 
       {activePanel && (
         <Layer as="aside" id="configuration-panel" className="app-panel" withBackground aria-labelledby="configuration-panel-title">
