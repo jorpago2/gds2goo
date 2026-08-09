@@ -1103,8 +1103,15 @@ export default function Home() {
   return (
     <>
       <Header className="app-header" aria-label="GDS2GOO">
-        <HeaderName className="header-brand" href="#workspace" prefix="">GDS2GOO</HeaderName>
+        <HeaderName className="header-brand" href="#workspace" prefix="">
+          <span className="header-brand-mark" aria-hidden="true">G</span>
+          <span className="header-brand-copy">
+            <strong>GDS2GOO</strong>
+            <small>Mask conversion</small>
+          </span>
+        </HeaderName>
         <div className="header-context" aria-label="Current workspace">
+          <span className="context-label">Current workspace</span>
           <p className="context-title">{sourceInfo ? `${topCell || "GDS"} · ${fileName || "untitled"}` : "No file loaded"}</p>
           <span
             className={`status-chip ${outsideScreen ? "status-chip--error" : outsideSubstrate ? "status-chip--warning" : busy ? "status-chip--running" : sourceInfo ? "status-chip--ready" : "status-chip--idle"}`}
@@ -1114,6 +1121,7 @@ export default function Home() {
             {workspaceStatus}
           </span>
         </div>
+        <span className="header-balance" aria-hidden="true" />
       </Header>
 
       <Content
