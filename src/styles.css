@@ -2,7 +2,7 @@
 @import "../tokens.css";
 
 :root {
-  --app-header-height: 4rem;
+  --app-header-height: var(--scientific-ui-header-block-size);
   --app-rail-width: var(--scientific-ui-rail-inline-size);
   --app-panel-width: var(--scientific-ui-panel-inline-size);
   --app-inspector-width: 20rem;
