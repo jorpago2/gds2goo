@@ -352,11 +352,6 @@ h1, h2, h3 { min-width: 0; overflow-wrap: anywhere; }
     margin-block-end: var(--scientific-ui-mobile-nav-block-size);
   }
   .workflow-navigation { position: fixed; z-index: var(--z-sticky); inset-inline: 0; inset-block-end: 0; inline-size: 100%; block-size: var(--scientific-ui-mobile-nav-block-size); }
-  .workflow-navigation ul { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
-  .workflow-navigation .scientific-tool-rail__item { block-size: 100%; flex-direction: column; border-inline-start: 0; border-block-start: var(--scientific-ui-active-indicator-size) solid transparent; }
-  .workflow-navigation .scientific-tool-rail__item.is-active,
-  .workflow-navigation .scientific-tool-rail__item[aria-expanded="true"] { border-block-start-color: var(--scientific-ui-link); }
-  .workflow-navigation .scientific-tool-rail__label { position: static; inline-size: auto; block-size: auto; clip: auto; clip-path: none; }
   .app-panel, .app-inspector { inset: var(--app-header-height) 0 var(--scientific-ui-mobile-nav-block-size); inline-size: 100%; max-inline-size: none; border: 0; box-shadow: none; }
   .app-shell-content[data-panel-open="true"] .app-result,
   .app-shell-content[data-inspector-open="true"] .app-result { margin-inline: 0; }

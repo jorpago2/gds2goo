@@ -52,7 +52,8 @@ test("exports the GDS2GOO application shell", async () => {
   const carbon = await readFile(new URL("../src/carbon.scss", import.meta.url), "utf8");
   assert.match(carbon, /@use ["']@carbon\/react["']/);
   assert.doesNotMatch(styles, /tailwindcss|@theme inline/);
-  assert.match(source, /<Header className="app-header"/);
+  assert.match(source, /<Header className="app-header scientific-app-header"/);
+  assert.match(source, /className="header-brand-mark scientific-app-header__brand-mark"/);
   assert.match(source, /className="workflow-navigation"/);
   assert.match(source, /data-panel-open/);
   assert.doesNotMatch(source, /<(?:button|input|select|textarea|details|summary)\b/);

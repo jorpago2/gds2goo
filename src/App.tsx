@@ -1102,9 +1102,9 @@ export default function Home() {
 
   return (
     <>
-      <Header className="app-header" aria-label="GDS2GOO">
+      <Header className="app-header scientific-app-header" aria-label="GDS2GOO">
         <HeaderName className="header-brand" href="#workspace" prefix="">
-          <span className="header-brand-mark" aria-hidden="true">G</span>
+          <span className="header-brand-mark scientific-app-header__brand-mark" aria-hidden="true">G</span>
           <span className="header-brand-copy">
             <strong>GDS2GOO</strong>
             <small>Mask conversion</small>
@@ -1131,7 +1131,7 @@ export default function Home() {
         data-inspector-open={showInspector}
       >
         <h1 className="visually-hidden">GDS2GOO scientific mask conversion workspace</h1>
-        <ScientificToolRail className="workflow-navigation" label="Configuration tools" activeId={activePanel} onChange={(id) => {
+        <ScientificToolRail className="workflow-navigation" label="Configuration tools" activeId={activePanel ?? "input"} expandedId={activePanel} onChange={(id) => {
           setActivePanel(id as "input" | "mask" | "process" | "export" | null);
           window.requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
         }} items={[
