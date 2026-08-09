@@ -33,7 +33,7 @@ import {
   parseGds,
 } from "@/lib/gds.js";
 import { Chemistry, Close, Document, Download, Grid as GridIcon } from "@carbon/react/icons";
-import { ExportReceipt as SharedExportReceipt, ScientificHeader, ScientificToolRail } from "@jorpago2/scientific-ui";
+import { ExportReceipt as SharedExportReceipt, ScientificHeader, ScientificTaskPanel, ScientificToolRail } from "@jorpago2/scientific-ui";
 import { buildGooFile, encodeBinaryLayer, MARS_4_9K, validateGooFile } from "@/lib/goo.js";
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "@/lib/calibration.js";
 import { fitsSubstrateArea, repeatShapes, transformGuideShapes } from "@/lib/experiment.js";
@@ -1132,11 +1132,16 @@ export default function Home() {
         ]} />
 
       {activePanel && (
-        <Layer as="aside" id="configuration-panel" className="app-panel" withBackground aria-labelledby="configuration-panel-title">
-          <div className="panel-header">
-            <div><p>Configuration</p><h2 id="configuration-panel-title">{activePanel === "input" ? "Input & layers" : activePanel === "mask" ? "Mask & placement" : activePanel === "process" ? "Process & resist" : "Export & review"}</h2></div>
-            <IconButton className="close-panel" kind="ghost" size="lg" label="Close configuration panel" align="bottom-end" onClick={closePanel}><Close /></IconButton>
-          </div>
+        <ScientificTaskPanel
+          id="configuration-panel"
+          className="app-panel"
+          titleId="configuration-panel-title"
+          title={activePanel === "input" ? "Input & layers" : activePanel === "mask" ? "Mask & placement" : activePanel === "process" ? "Process & resist" : "Export & review"}
+          eyebrow="Configuration"
+          closeLabel="Close"
+          onClose={closePanel}
+          bodyClassName="panel-content controls"
+        >
           {sourceInfo && activePanel !== "input" && (
             <div className="mobile-panel-preview" aria-label="Live mask preview">
               <div>
@@ -1146,7 +1151,6 @@ export default function Home() {
               <canvas ref={panelPreview} aria-label="Compact live mask preview" />
             </div>
           )}
-          <div className="panel-content controls">
             {activePanel === "input" && (
               <>
                 <FileUploaderDropContainer
@@ -1334,7 +1338,7 @@ export default function Home() {
                   </AccordionItem>
                 </Accordion>
 
-                <Layer className="process-metadata" withBackground>
+                <Layer className="process-metadata process-metadata-card" withBackground>
                   <h3>Process metadata</h3>
                   <div className="process-grid">
                     <ComboBox
@@ -1435,11 +1439,10 @@ export default function Home() {
                  <p>Load a GDSII file first in the Input panel.</p>
                </div>
             )}
-          </div>
-        </Layer>
+        </ScientificTaskPanel>
       )}
 
-      <section className="app-result" data-empty={!sourceInfo} aria-label="Mask preview and export">
+      <section className="app-result scientific-stage" data-empty={!sourceInfo} aria-label="Mask preview and export">
         <section ref={previewPanel} className="preview-panel">
           {sourceInfo && <>
           <div className="preview-toolbar">
@@ -1652,15 +1655,15 @@ export default function Home() {
         </section>
       </section>
 
-      <Layer as="aside" id="pixel-inspector" className={`app-inspector ${showInspector ? "open" : ""}`} withBackground aria-labelledby="pixel-inspector-title" hidden={!showInspector}>
+      <Layer as="aside" id="pixel-inspector" className={`app-inspector scientific-inspector ${showInspector ? "open" : ""}`} withBackground aria-labelledby="pixel-inspector-title" hidden={!showInspector}>
          {showInspector ? (
             <div className="pixel-inspector">
-              <div className="inspector-header">
+              <div className="inspector-header scientific-inspector__heading">
                 <p>Selection</p>
                 <h2 id="pixel-inspector-title">Native 1:1 inspector</h2>
                 <IconButton className="close-panel" kind="ghost" size="lg" label="Close pixel inspector" align="bottom-end" onClick={() => setInspectorOpen(false)}><Close /></IconButton>
               </div>
-              <div className="inspector-content">
+              <div className="inspector-content scientific-inspector__body">
                 <canvas ref={inspector} aria-label={`Native LCD pixels around ${inspection.x}, ${inspection.y}`} />
                 <div className="inspector-metrics">
                   <strong>PX {inspection.x}, {inspection.y}</strong>
@@ -1680,7 +1683,7 @@ export default function Home() {
           )}
       </Layer>
 
-      <Layer className="app-status" withBackground data-kind={outsideScreen ? "error" : outsideSubstrate ? "warning" : busy ? "running" : sourceInfo ? "ready" : "idle"} aria-label="Mask status">
+      <Layer className="app-status scientific-status-surface" withBackground data-kind={outsideScreen ? "error" : outsideSubstrate ? "warning" : busy ? "running" : sourceInfo ? "ready" : "idle"} aria-label="Mask status">
         <p className="status-message" title={message}><span aria-hidden="true" /><span className="status-message-text">{message}</span></p>
         <dl className="status-metrics">
           <div><dt>LCD pixel</dt><dd>18 × 18 µm</dd></div>
