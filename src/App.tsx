@@ -1668,7 +1668,7 @@ export default function Home() {
 
       <section className="print-sheet" aria-label="Experimental run sheet">
         <header>
-          <div><p>GDS2GOO · EXPERIMENT RECORD</p><h1>UV exposure run sheet</h1></div>
+          <div><p>GDS2GOO · EXPERIMENT RECORD</p><h2 className="print-title">UV exposure run sheet</h2></div>
           <p>Elegoo Mars 4 9K<br />405 nm · 18 µm pixel</p>
         </header>
         <dl className="print-parameters">

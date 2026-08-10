@@ -201,18 +201,18 @@ h1, h2, h3 { min-width: 0; overflow-wrap: anywhere; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  *, *::before, *::after { animation-duration: 0s; animation-iteration-count: 1; transition-duration: 0s; scroll-behavior: auto; }
 }
 
 @media print {
   @page { size: A4; margin: 15mm; }
   body { background: var(--print-paper); color: var(--print-ink); font-family: var(--font-body); }
-  main > :not(.print-sheet) { display: none !important; }
+  body main > :not(.print-sheet) { display: none; }
   .print-sheet { display: block; font-size: 10pt; }
   .print-sheet header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: var(--rule-fine) solid var(--print-ink); padding-bottom: 8mm; }
   .print-sheet header p { margin: 0; text-align: right; font-size: 8pt; }
   .print-sheet header div p { text-align: left; font-weight: 800; letter-spacing: .08em; }
-  .print-sheet h1 { margin: 2mm 0 0; font-size: 22pt; }
+  .print-sheet .print-title { margin: 2mm 0 0; font-size: 22pt; }
   .print-sheet h2 { margin: 0 0 3mm; font-size: 12pt; }
   .print-parameters { display: grid; grid-template-columns: 1fr 1fr; margin: 8mm 0; border: var(--rule-hair) solid var(--print-rule); }
   .print-parameters > div { padding: 3mm; border-bottom: var(--rule-hair) solid var(--print-rule); }
