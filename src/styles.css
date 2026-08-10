@@ -286,7 +286,8 @@ h1, h2, h3 { min-width: 0; overflow-wrap: anywhere; }
     grid-template-areas: "main" "status";
     margin-block-end: var(--scientific-ui-mobile-nav-total-block-size);
   }
-  .app-panel, .app-inspector { inset: var(--app-header-height) 0 var(--scientific-ui-mobile-nav-total-block-size); block-size: auto; inline-size: 100%; max-inline-size: none; border: 0; box-shadow: none; }
+  .app-panel.app-panel.app-panel,
+  .app-inspector.app-inspector.app-inspector { inset: var(--app-header-height) 0 var(--scientific-ui-mobile-nav-total-block-size); block-size: auto; inline-size: 100%; max-inline-size: none; border: 0; box-shadow: none; }
   .app-shell-content[data-panel-open="true"] .app-result,
   .app-shell-content[data-inspector-open="true"] .app-result { margin-inline: 0; }
   .app-shell-content[data-panel-open="true"] .app-status,
