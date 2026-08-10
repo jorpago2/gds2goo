@@ -1140,7 +1140,6 @@ export default function Home() {
           eyebrow="Configuration"
           closeLabel="Close"
           onClose={closePanel}
-          bodyClassName="panel-content controls"
         >
           {sourceInfo && activePanel !== "input" && (
             <div className="mobile-panel-preview" aria-label="Live mask preview">

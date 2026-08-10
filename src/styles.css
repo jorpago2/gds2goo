@@ -226,13 +226,12 @@ h1, h2, h3 { min-width: 0; overflow-wrap: anywhere; }
 
 
 
-.app-panel { grid-area: panel; min-width: 0; min-height: 0; display: flex; flex-direction: column; container-type: inline-size; border-inline-end: 1px solid var(--cds-border-subtle); }
+.app-panel { grid-area: panel; min-width: 0; min-height: 0; }
 .inspector-header { min-block-size: 4.5rem; display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-sm); padding: var(--space-sm); border-block-end: 1px solid var(--cds-border-subtle); }
 .inspector-header p { margin: 0 0 var(--space-2xs); color: var(--cds-text-secondary); font-size: var(--text-xs); }
 .inspector-header h2 { margin: 0; font-size: var(--text-base); font-weight: 600; line-height: 1.2; }
 .close-panel { flex: 0 0 auto; }
 .mobile-panel-preview { display: none; }
-.panel-content { overflow-x: clip; }
 
 @container (max-width: 22rem) {
   .settings-grid, .process-grid { grid-template-columns: minmax(0, 1fr); }
@@ -288,10 +287,22 @@ h1, h2, h3 { min-width: 0; overflow-wrap: anywhere; }
     grid-template-areas: "main" "status";
     margin-block-end: var(--scientific-ui-mobile-nav-total-block-size);
   }
-  .workflow-navigation { position: fixed; z-index: var(--z-sticky); inset-inline: 0; inset-block-end: 0; inline-size: 100%; block-size: var(--scientific-ui-mobile-nav-total-block-size); }
   .app-panel, .app-inspector { inset: var(--app-header-height) 0 var(--scientific-ui-mobile-nav-total-block-size); inline-size: 100%; max-inline-size: none; border: 0; box-shadow: none; }
   .app-shell-content[data-panel-open="true"] .app-result,
   .app-shell-content[data-inspector-open="true"] .app-result { margin-inline: 0; }
+  .mobile-panel-preview {
+    min-block-size: 7.5rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 7.5rem;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-block-end: var(--space-sm);
+    padding-block-end: var(--space-sm);
+    border-block-end: 1px solid var(--cds-border-subtle);
+  }
+  .mobile-panel-preview > div { min-inline-size: 0; display: grid; gap: var(--space-2xs); }
+  .mobile-panel-preview span { overflow: hidden; color: var(--cds-text-secondary); font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-panel-preview canvas { inline-size: 7.5rem; block-size: auto; max-block-size: 7.5rem; border: 1px solid var(--cds-border-subtle); background: var(--viewer-surface-deep); object-fit: contain; }
 }
 
 @media (max-width: 48rem) {
