@@ -1137,12 +1137,12 @@ export default function Home() {
                   className="gds-uploader"
                   accept={[".gds", ".gdsii"]}
                   maxFileSize={100 * 1024 * 1024}
-                  labelText={fileName ? `Replace ${fileName}` : "Drop or select a GDSII file · max. 100 MB"}
+                  labelText={fileName ? "Replace GDSII file" : "Drop or select a GDSII file · max. 100 MB"}
                   onAddFiles={(_event, { addedFiles }) => void loadFile(addedFiles[0])}
                 />
 
                 <div className="source-actions">
-                  <Button kind="tertiary" size="sm" disabled={busy} onClick={loadCalibrationPattern}>18–180 µm calibration pattern</Button>
+                  <Button kind="tertiary" size="sm" disabled={busy} onClick={loadCalibrationPattern}>18–180 µm calibration</Button>
                   <Button kind="tertiary" size="sm" disabled={busy} onClick={loadOrientationPattern}>Printer orientation check</Button>
                   <Button ref={logoExampleButton} kind="tertiary" size="sm" disabled={busy} title="40.0 × 13.4 mm · layer 1 · 22.2 µm source grid" onClick={() => void loadLogoExample()}>UV logo GDS example</Button>
                   <FileUploaderButton id="run-file" accept={[".json", "application/json"]} buttonKind="tertiary" size="sm" disabled={busy} labelText="Restore .run.json" onChange={(event) => void restoreRun(event.target.files?.[0])} />
@@ -1160,14 +1160,8 @@ export default function Home() {
                         kind={model.compatibility.warnings.length ? "warning" : "success"}
                         lowContrast
                         title={model.compatibility.warnings.length ? `GDS compatibility · ${model.compatibility.warnings.length} warning(s)` : "GDS compatibility · Ready"}
-                      >
-                        <p>
-                          {model.compatibility.elementCounts.boundaries} BOUNDARY · {model.compatibility.elementCounts.boxes} BOX · {model.compatibility.elementCounts.paths} PATH · {model.compatibility.elementCounts.references} REF
-                        </p>
-                        {model.compatibility.warnings.length ? (
-                          <ul>{model.compatibility.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
-                        ) : <p>No unsupported exposure geometry detected.</p>}
-                      </InlineNotification>
+                        subtitle={`${model.compatibility.elementCounts.boundaries} BOUNDARY · ${model.compatibility.elementCounts.boxes} BOX · ${model.compatibility.elementCounts.paths} PATH · ${model.compatibility.elementCounts.references} REF. ${model.compatibility.warnings.length ? model.compatibility.warnings.join(" ") : "No unsupported exposure geometry detected."}`}
+                      />
                     )}
                     <fieldset>
                       <legend>Layers to expose</legend>

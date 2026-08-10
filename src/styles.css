@@ -40,7 +40,7 @@ main.app-shell-content[data-panel-open="true"][data-inspector-open="true"] { gri
 .source-actions > * { min-inline-size: 0; }
 .source-actions > button { inline-size: 100%; max-inline-size: none; }
 .file-options { margin-block-start: var(--space-md); display: grid; gap: var(--space-sm); }
-.compatibility-notification { max-inline-size: none; }
+.compatibility-notification { inline-size: 100%; max-inline-size: none; }
 .compatibility-notification p { margin: var(--space-2xs) 0 0; font-size: var(--text-xs); line-height: 1.45; }
 .compatibility-notification ul { margin: var(--space-2xs) 0 0; padding-inline-start: var(--space-sm); font-size: var(--text-xs); line-height: 1.45; }
 .compatibility-notification li + li { margin-block-start: var(--space-3xs); }
@@ -185,6 +185,8 @@ h1, h2, h3 { min-width: 0; overflow-wrap: anywhere; }
 }
 
 @media (max-width: 35rem) {
+  .export-receipt dl div { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .fullscreen-control { min-block-size: var(--scientific-ui-target-size); }
   .preview-heading { display: grid; justify-content: start; }
   .preview-tools { width: 100%; grid-template-columns: 1fr; justify-content: stretch; }
   .zoom-tools, .preview-mode-tools { flex-wrap: wrap; border: 0; padding: 0; }
