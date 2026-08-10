@@ -5,7 +5,7 @@ import test from "node:test";
 import { boundsOf, fitsDisplay, flattenGds, parseGds, placedBoundsOf } from "../lib/gds.js";
 import { buildGooFile, encodeBinaryLayer, validateGooFile } from "../lib/goo.js";
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "../lib/calibration.js";
-import { fitsSubstrateArea, repeatShapes, transformGuideShapes } from "../lib/experiment.js";
+import { fitsSubstrateArea, repeatShapes, requiresSubstrateValidation, transformGuideShapes } from "../lib/experiment.js";
 import { createRunManifest, parseRunManifest } from "../lib/manifest.js";
 import { createMonochromePreview, mergeBinaryOverlay, rasterizeBinaryMask } from "../lib/raster.js";
 import { parseRecipeLibrary, saveRecipeToLibrary } from "../lib/recipes.js";
@@ -274,6 +274,13 @@ test("builds repeat arrays, substrate guides, usable-area checks and local recip
   const recipe = { name: "AZ1505", exposure: 9, calibrationSeries: "7, 9, 11", process: { photoresist: "AZ1505", thicknessNm: "600", softBake: "100 C", development: "45 s", notes: "" } };
   assert.deepEqual(parseRecipeLibrary(JSON.stringify(saveRecipeToLibrary([], recipe))), [recipe]);
   assert.deepEqual(parseRecipeLibrary("not JSON"), []);
+});
+
+test("only imported device layouts require selected-substrate validation", () => {
+  assert.equal(requiresSubstrateValidation("gds"), true);
+  assert.equal(requiresSubstrateValidation("generated-calibration"), false);
+  assert.equal(requiresSubstrateValidation("generated-diagnostic"), false);
+  assert.equal(requiresSubstrateValidation(undefined), false);
 });
 
 test("ships a physically scaled Universitat de València logo GDS", async () => {

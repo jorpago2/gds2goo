@@ -36,7 +36,7 @@ import { Chemistry, Close, Document, Download, Grid as GridIcon } from "@carbon/
 import { ExportReceipt as SharedExportReceipt, ScientificHeader, ScientificTaskPanel, ScientificToolRail } from "@jorpago2/scientific-ui";
 import { buildGooFile, encodeBinaryLayer, MARS_4_9K, validateGooFile } from "@/lib/goo.js";
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "@/lib/calibration.js";
-import { fitsSubstrateArea, repeatShapes, transformGuideShapes } from "@/lib/experiment.js";
+import { fitsSubstrateArea, repeatShapes, requiresSubstrateValidation, transformGuideShapes } from "@/lib/experiment.js";
 import { createRunManifest, parseRunManifest } from "@/lib/manifest.js";
 import {
   parsePhotoresistResponseProfiles,
@@ -473,7 +473,8 @@ export default function Home() {
     } : null;
   const exportedAlignmentShapes = exportedSubstrateShapes.slice(includeSubstrateOutline ? substrateOutlineShapes.length : 0);
   const outsideSubstrate = Boolean(substrateFitSettings && repeatedShapes.length && (
-    !fitsSubstrateArea(repeatedShapes, settings, substrateFitSettings)
+    (requiresSubstrateValidation(sourceInfo?.kind)
+      && !fitsSubstrateArea(repeatedShapes, settings, substrateFitSettings))
     || !fitsSubstrateArea(exportedAlignmentShapes, SUBSTRATE_MASK_SETTINGS, substrateFitSettings)
   ));
   const measurement = measurementStart && measurementEnd ? {
