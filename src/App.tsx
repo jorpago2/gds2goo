@@ -298,7 +298,6 @@ function boundedNumber(value: string, current: number, minimum: number, maximum:
 export default function Home() {
   const logoExampleButton = useRef<HTMLButtonElement>(null);
   const preview = useRef<HTMLCanvasElement>(null);
-  const panelPreview = useRef<HTMLCanvasElement>(null);
   const inspector = useRef<HTMLCanvasElement>(null);
   const previewPanel = useRef<HTMLElement>(null);
   const lcdGrid = useRef<HTMLDivElement>(null);
@@ -509,18 +508,7 @@ export default function Home() {
         opticalBlurMicrometers / (MARS_4_9K.pixelMicrometers * MARS_4_9K.width / previewRasterSize.width),
       );
     } else drawBinaryPixels(preview.current, pixels, previewRasterSize.width, previewRasterSize.height);
-    if (panelPreview.current) {
-      const width = 560;
-      const height = Math.round(width * previewRasterSize.height / previewRasterSize.width);
-      const context = panelPreview.current.getContext("2d", { alpha: false });
-      if (context) {
-        panelPreview.current.width = width;
-        panelPreview.current.height = height;
-        context.imageSmoothingEnabled = false;
-        context.drawImage(preview.current, 0, 0, width, height);
-      }
-    }
-  }, [repeatedShapes, settings, exportedSubstrateShapes, previewRasterSize.width, previewRasterSize.height, showResistResponse, responseThresholdSeconds, responseContrast, opticalBlurMicrometers, activePanel]);
+  }, [repeatedShapes, settings, exportedSubstrateShapes, previewRasterSize.width, previewRasterSize.height, showResistResponse, responseThresholdSeconds, responseContrast, opticalBlurMicrometers]);
 
   useEffect(() => {
     if (!inspector.current || !repeatedShapes.length) return;
@@ -1141,15 +1129,6 @@ export default function Home() {
           closeLabel="Close"
           onClose={closePanel}
         >
-          {sourceInfo && activePanel !== "input" && (
-            <div className="mobile-panel-preview" aria-label="Live mask preview">
-              <div>
-                <strong>Live preview</strong>
-                <span>{transformSummary}</span>
-              </div>
-              <canvas ref={panelPreview} aria-label="Compact live mask preview" />
-            </div>
-          )}
             {activePanel === "input" && (
               <>
                 <FileUploaderDropContainer

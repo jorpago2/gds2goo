@@ -32,7 +32,7 @@ test("exports the GDS2GOO application shell", async () => {
   assert.match(source, /Step-and-repeat/);
   assert.match(source, /Local process recipes/);
   assert.match(source, /Search by recipe, resist or thickness/);
-  assert.match(source, /className="mobile-panel-preview"/);
+  assert.doesNotMatch(source, /mobile-panel-preview|Compact live mask preview/);
   assert.match(source, /className="transform-summary"/);
   assert.match(source, /Export generated/);
   assert.match(source, /Custom circular substrate/);
