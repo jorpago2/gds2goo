@@ -1101,6 +1101,10 @@ export default function Home() {
           state: outsideScreen || outsideSubstrate ? "warning" : busy ? "running" : sourceInfo ? "ready" : "needs-input",
           label: workspaceStatus,
         }}
+        help={{
+          summary: "Load a GDS, configure mask and process settings, inspect the exposure preview, then export the printer-ready package.",
+          shortcuts: [{ keys: ["Esc"], description: "Close the active panel or inspector" }],
+        }}
       />
 
       <Content
