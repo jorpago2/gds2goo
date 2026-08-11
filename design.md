@@ -10,7 +10,7 @@ This document is the visual contract for the GDS-to-GOO laboratory workspace. Sc
 
 - Carbon Design System, theme `g10`, is the sole screen-interface foundation.
 - `@carbon/react` components own controls, notifications, focus, states, surfaces, shape and elevation.
-- IBM Plex Sans is the interface typeface. IBM Plex Mono is reserved for measurements, coordinates, hashes and machine-readable values.
+- IBM Plex Sans is the interface typeface for all text, measurements, coordinates, hashes and machine-readable values.
 - Carbon semantic tokens are used directly for application colours. GDS2GOO does not maintain a parallel UI palette.
 
 ## Interface structure

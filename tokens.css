@@ -1,7 +1,7 @@
 :root {
   /* Carbon owns application colour, type, focus, shape and elevation. */
   --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  --font-mono: var(--scientific-ui-font-sans, "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif);
 
   /* Carbon-aligned type and spacing used by the custom workbench layout. */
   --text-xs: 0.75rem;
