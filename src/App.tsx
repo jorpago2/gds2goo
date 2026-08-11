@@ -7,10 +7,8 @@ import {
   Button,
   Checkbox,
   ComboBox,
-  Content,
   FileUploaderButton,
   FileUploaderDropContainer,
-  IconButton,
   InlineNotification,
   Layer,
   Link,
@@ -32,8 +30,17 @@ import {
   flattenGds,
   parseGds,
 } from "@/lib/gds.js";
-import { Chemistry, Close, Document, Download, Grid as GridIcon } from "@carbon/react/icons";
-import { ExportReceipt as SharedExportReceipt, ScientificHeader, ScientificTaskPanel, ScientificToolRail } from "@jorpago2/scientific-ui";
+import { Chemistry, Document, Download, Grid as GridIcon } from "@carbon/react/icons";
+import {
+  ExportReceipt as SharedExportReceipt,
+  InspectorPanel,
+  ScientificAppShell,
+  ScientificHeader,
+  ScientificStatusBar,
+  ScientificTaskPanel,
+  ScientificToolRail,
+  type ScientificState,
+} from "@jorpago2/scientific-ui";
 import { buildGooFile, encodeBinaryLayer, MARS_4_9K, validateGooFile } from "@/lib/goo.js";
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "@/lib/calibration.js";
 import { fitsSubstrateArea, repeatShapes, requiresSubstrateValidation, transformGuideShapes } from "@/lib/experiment.js";
@@ -1086,10 +1093,51 @@ export default function Home() {
           ? "Ready"
           : "Needs input";
   const showInspector = inspectorOpen && visibleShapes.length > 0;
+  const scientificState: ScientificState = outsideScreen
+    ? "failed"
+    : outsideSubstrate
+      ? "warning"
+      : busy
+        ? "running"
+        : sourceInfo
+          ? "ready"
+          : "needs-input";
+  const inspectorPanel = (
+    <InspectorPanel open={showInspector} title="Native 1:1 inspector" onClose={() => setInspectorOpen(false)}>
+      <div className="pixel-inspector">
+        <canvas ref={inspector} aria-label={`Native LCD pixels around ${inspection.x}, ${inspection.y}`} />
+        <div className="inspector-metrics">
+          <strong>PX {inspection.x}, {inspection.y}</strong>
+          <span>
+            {((inspection.x + 0.5) * 0.018 - MARS_4_9K.sizeX / 2).toFixed(3)} mm X
+            <br />
+            {(MARS_4_9K.sizeY / 2 - (inspection.y + 0.5) * 0.018).toFixed(3)} mm Y
+          </span>
+        </div>
+        <small>Click the main preview to inspect a 64 × 64 native-pixel region.</small>
+      </div>
+    </InspectorPanel>
+  );
+  const statusBar = (
+    <ScientificStatusBar
+      className="app-status"
+      aria-label="Mask status"
+      status={{ state: scientificState, label: message }}
+      metadata={(
+        <dl className="status-metrics">
+          <div><dt>Layout</dt><dd>{bounds ? `${(bounds.width / 1000).toFixed(3)} × ${(bounds.height / 1000).toFixed(3)} mm` : "—"}</dd></div>
+          <div><dt>Minimum feature</dt><dd className={minimumFeature !== null && minimumFeature < 36 ? "warn" : ""}>{minimumFeature === null ? "—" : `${minimumFeature.toFixed(1)} µm`}</dd></div>
+          <div><dt>Layers</dt><dd>{selectedLayers.length || "—"}</dd></div>
+        </dl>
+      )}
+    />
+  );
 
   return (
-    <>
-      <ScientificHeader
+    <ScientificAppShell
+      className="gds2goo-shell"
+      panelOpen={Boolean(activePanel)}
+      header={<ScientificHeader
         aria-label="GDS2GOO"
         product="GDS2GOO"
         productMark="G"
@@ -1105,16 +1153,8 @@ export default function Home() {
           summary: "Load a GDS, configure mask and process settings, inspect the exposure preview, then export the printer-ready package.",
           shortcuts: [{ keys: ["Esc"], description: "Close the active panel or inspector" }],
         }}
-      />
-
-      <Content
-        id="workspace"
-        className="app-shell-content"
-        data-panel-open={Boolean(activePanel)}
-        data-inspector-open={showInspector}
-      >
-        <h1 className="visually-hidden">GDS2GOO scientific mask conversion workspace</h1>
-        <ScientificToolRail className="workflow-navigation" label="Configuration tools" activeId={activePanel ?? "input"} expandedId={activePanel} onChange={(id) => {
+      />}
+      navigation={<ScientificToolRail className="workflow-navigation" label="Configuration tools" activeId={activePanel ?? "input"} expandedId={activePanel} onChange={(id) => {
           setActivePanel(id as "input" | "mask" | "process" | "export" | null);
           window.requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
         }} items={[
@@ -1122,9 +1162,10 @@ export default function Home() {
           { id: "mask", label: "Mask", icon: <GridIcon size={20} />, controlsId: "configuration-panel" },
           { id: "process", label: "Process", icon: <Chemistry size={20} />, controlsId: "configuration-panel" },
           { id: "export", label: "Export", icon: <Download size={20} />, controlsId: "configuration-panel" },
-        ]} />
-
-      {activePanel && (
+        ]} />}
+      inspector={inspectorPanel}
+      statusBar={statusBar}
+      panel={activePanel ? (
         <ScientificTaskPanel
           id="configuration-panel"
           className="app-panel"
@@ -1417,7 +1458,10 @@ export default function Home() {
                </div>
             )}
         </ScientificTaskPanel>
-      )}
+      ) : undefined}
+    >
+      <div id="workspace" className="gds2goo-workspace">
+      <h1 className="visually-hidden">GDS2GOO scientific mask conversion workspace</h1>
 
       <section className="app-result scientific-stage" data-empty={!sourceInfo} aria-label="Mask preview and export">
         <section ref={previewPanel} className="preview-panel">
@@ -1545,7 +1589,7 @@ export default function Home() {
           )}
           </>}
           <div className="lcd-shell">
-            <div ref={lcdGrid} className={`lcd-grid ${visibleShapes.length ? "" : "is-empty"}`} title="Use the mouse wheel or a trackpad pinch gesture to zoom">
+            <div ref={lcdGrid} className={`lcd-grid ${visibleShapes.length ? previewZoom <= 1 ? "is-fit" : "" : "is-empty"}`} title="Use the mouse wheel or a trackpad pinch gesture to zoom">
               {visibleShapes.length ? (
                 <div
                   className="preview-surface"
@@ -1632,44 +1676,6 @@ export default function Home() {
         </section>
       </section>
 
-      <Layer as="aside" id="pixel-inspector" className={`app-inspector scientific-inspector ${showInspector ? "open" : ""}`} withBackground aria-labelledby="pixel-inspector-title" hidden={!showInspector}>
-         {showInspector ? (
-            <div className="pixel-inspector">
-              <div className="inspector-header scientific-inspector__heading">
-                <p>Selection</p>
-                <h2 id="pixel-inspector-title">Native 1:1 inspector</h2>
-                <IconButton className="close-panel" kind="ghost" size="lg" label="Close pixel inspector" align="bottom-end" onClick={() => setInspectorOpen(false)}><Close /></IconButton>
-              </div>
-              <div className="inspector-content scientific-inspector__body">
-                <canvas ref={inspector} aria-label={`Native LCD pixels around ${inspection.x}, ${inspection.y}`} />
-                <div className="inspector-metrics">
-                  <strong>PX {inspection.x}, {inspection.y}</strong>
-                  <span>
-                    {((inspection.x + 0.5) * 0.018 - MARS_4_9K.sizeX / 2).toFixed(3)} mm X
-                    <br />
-                    {(MARS_4_9K.sizeY / 2 - (inspection.y + 0.5) * 0.018).toFixed(3)} mm Y
-                  </span>
-                </div>
-                <small>Click the main preview to inspect a 64 × 64 native-pixel region.</small>
-              </div>
-            </div>
-          ) : (
-            <div className="empty-inspector">
-               <p>No objects selected</p>
-            </div>
-          )}
-      </Layer>
-
-      <Layer className="app-status scientific-status-surface" withBackground data-kind={outsideScreen ? "error" : outsideSubstrate ? "warning" : busy ? "running" : sourceInfo ? "ready" : "idle"} aria-label="Mask status">
-        <p className="status-message" title={message}><span aria-hidden="true" /><span className="status-message-text">{message}</span></p>
-        <dl className="status-metrics">
-          <div><dt>LCD pixel</dt><dd>18 × 18 µm</dd></div>
-          <div><dt>Layout</dt><dd>{bounds ? `${(bounds.width / 1000).toFixed(3)} × ${(bounds.height / 1000).toFixed(3)} mm` : "—"}</dd></div>
-          <div><dt>Minimum feature</dt><dd className={minimumFeature !== null && minimumFeature < 36 ? "warn" : ""}>{minimumFeature === null ? "—" : `${minimumFeature.toFixed(1)} µm`}</dd></div>
-          <div><dt>Layers</dt><dd>{selectedLayers.length || "—"}</dd></div>
-        </dl>
-      </Layer>
-
       <section className="print-sheet" aria-label="Experimental run sheet">
         <header>
           <div><p>GDS2GOO · EXPERIMENT RECORD</p><h2 className="print-title">UV exposure run sheet</h2></div>
@@ -1707,7 +1713,7 @@ export default function Home() {
         </div>
         <footer>Generated from the current local GDS2GOO state. Attach the companion <code>.run.json</code> to the laboratory record.</footer>
       </section>
-      </Content>
-    </>
+      </div>
+    </ScientificAppShell>
   );
 }
