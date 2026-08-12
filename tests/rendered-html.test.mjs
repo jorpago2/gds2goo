@@ -14,7 +14,7 @@ test("exports the GDS2GOO application shell", async () => {
   assert.match(html, /GDS2GOO/);
   assert.match(html, /Elegoo Mars 4/);
   assert.match(html, /Needs input/);
-  for (const section of ["Input", "Mask", "Process", "Export"]) assert.match(html, new RegExp(`>${section}<`));
+  for (const section of ["Input", "Layout", "Process", "Review"]) assert.match(html, new RegExp(`>${section}<`));
   assert.match(html, /Start a mask/);
   assert.match(html, /Open GDS/);
   assert.match(html, /Try UV example/);

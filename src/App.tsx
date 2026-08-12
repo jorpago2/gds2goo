@@ -36,6 +36,7 @@ import {
   InspectorPanel,
   ScientificAppShell,
   ScientificHeader,
+  ScientificPreflightSummary,
   ScientificStatusBar,
   ScientificTaskPanel,
   ScientificToolRail,
@@ -1159,9 +1160,9 @@ export default function Home() {
           window.requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
         }} items={[
           { id: "input", label: "Input", icon: <Document size={20} />, controlsId: "configuration-panel" },
-          { id: "mask", label: "Mask", icon: <GridIcon size={20} />, controlsId: "configuration-panel" },
+          { id: "mask", label: "Layout", icon: <GridIcon size={20} />, controlsId: "configuration-panel" },
           { id: "process", label: "Process", icon: <Chemistry size={20} />, controlsId: "configuration-panel" },
-          { id: "export", label: "Export", icon: <Download size={20} />, controlsId: "configuration-panel" },
+          { id: "export", label: "Review", icon: <Download size={20} />, controlsId: "configuration-panel" },
         ]} />}
       inspector={inspectorPanel}
       statusBar={statusBar}
@@ -1170,7 +1171,7 @@ export default function Home() {
           id="configuration-panel"
           className="app-panel"
           titleId="configuration-panel-title"
-          title={activePanel === "input" ? "Input & layers" : activePanel === "mask" ? "Mask & placement" : activePanel === "process" ? "Process & resist" : "Export & review"}
+          title={activePanel === "input" ? "Input & layers" : activePanel === "mask" ? "Layout & placement" : activePanel === "process" ? "Process & resist" : "Review & export"}
           eyebrow="Configuration"
           closeLabel="Close"
           onClose={closePanel}
@@ -1415,6 +1416,21 @@ export default function Home() {
 
             {activePanel === "export" && sourceInfo && (
               <>
+                <ScientificPreflightSummary
+                  className="export-preflight"
+                  title="Printer preflight"
+                  description="Resolve blocking geometry issues before generating machine files. Process metadata warnings remain visible in the run manifest."
+                  status={{
+                    state: outsideScreen ? "failed" : outsideSubstrate || minimumFeature === null || minimumFeature < 36 ? "warning" : "ready",
+                    label: outsideScreen ? "Export blocked" : outsideSubstrate || minimumFeature === null || minimumFeature < 36 ? "Review before export" : "Ready to generate",
+                  }}
+                  checks={[
+                    { id: "geometry", label: "Selected geometry", state: visibleShapes.length ? "passed" : "failed", value: `${visibleShapes.length.toLocaleString("en-US")} objects` },
+                    { id: "lcd", label: "LCD bounds", state: outsideScreen ? "failed" : "passed", detail: outsideScreen ? "The transformed layout exceeds the printable LCD area." : "The transformed layout fits the printable area." },
+                    { id: "substrate", label: "Substrate placement", state: outsideSubstrate ? "warning" : substrateFitSettings ? "passed" : "not-applicable", detail: outsideSubstrate ? "Part of the layout lies outside the configured substrate." : undefined },
+                    { id: "feature", label: "Minimum feature", state: minimumFeature === null ? "not-run" : minimumFeature < 36 ? "warning" : "passed", value: minimumFeature === null ? "Not estimated" : `${minimumFeature.toFixed(1)} µm`, detail: minimumFeature !== null && minimumFeature < 36 ? "Below two native LCD pixels; inspect rasterization carefully." : undefined },
+                  ]}
+                />
                 <Layer className="export-dock" withBackground>
                   <Button className="primary-action" kind="primary" size="lg" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportGoo()}>
                     {busy ? "Processing…" : "Generate .GOO"}
