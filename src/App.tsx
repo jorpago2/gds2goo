@@ -36,6 +36,7 @@ import {
   InspectorPanel,
   ScientificAppShell,
   ScientificHeader,
+  ScientificOutcomeSummary,
   ScientificPreflightSummary,
   ScientificStatusBar,
   ScientificTaskPanel,
@@ -1416,6 +1417,38 @@ export default function Home() {
 
             {activePanel === "export" && sourceInfo && (
               <>
+                <ScientificOutcomeSummary
+                  className="export-outcome"
+                  headingLevel={3}
+                  title={exportReceipt?.kind === "success" ? "Machine file generated" : exportReceipt?.kind === "error" ? "Generation failed" : "Generation outcome"}
+                  status={busy
+                    ? { state: "running", label: "Generating files", detail: message }
+                    : exportReceipt?.kind === "success"
+                      ? { state: "up-to-date", label: "Export current", detail: exportReceipt.timestamp }
+                      : exportReceipt?.kind === "error"
+                        ? { state: "failed", label: "No file generated", detail: exportReceipt.validation }
+                        : outsideScreen
+                          ? { state: "failed", label: "Export blocked" }
+                          : outsideSubstrate || minimumFeature === null || minimumFeature < 36
+                            ? { state: "warning", label: "Review before generation" }
+                            : { state: "ready", label: "Ready to generate" }}
+                  summary={exportReceipt?.kind === "success"
+                    ? `${exportReceipt.filename} was generated from the current transform and geometry. Keep the run manifest with the machine file.`
+                    : exportReceipt?.kind === "error"
+                      ? exportReceipt.validation
+                      : "Generate the printer file only after reviewing geometry, polarity, orientation and minimum feature size."}
+                  metrics={[
+                    { id: "geometry", label: "Exported geometry", value: repeatedShapes.length.toLocaleString("en-US"), unit: "objects" },
+                    { id: "minimum-feature", label: "Minimum feature", value: minimumFeature === null ? "Not estimated" : minimumFeature.toFixed(1), unit: minimumFeature === null ? undefined : "µm", status: minimumFeature !== null && minimumFeature < 36 ? "warning" : "neutral" },
+                    { id: "copies", label: "Step-and-repeat", value: `${repeatRows} × ${repeatColumns}` },
+                  ]}
+                  actions={[
+                    { id: "generate-goo", label: busy ? "Processing…" : "Generate .GOO", emphasis: "primary", disabled: busy || !visibleShapes.length || outsideScreen, disabledReason: outsideScreen ? "Move the geometry inside the LCD area." : !visibleShapes.length ? "Select geometry before generating." : undefined, onClick: () => void exportGoo() },
+                    { id: "verification-png", label: "Verification PNG", emphasis: "secondary", collapseAt: "sm", disabled: busy || !visibleShapes.length || outsideScreen, onClick: () => void exportPng() },
+                    { id: "experiment-bundle", label: "Experiment bundle", emphasis: "secondary", collapseAt: "md", disabled: busy || !visibleShapes.length || outsideScreen, onClick: () => void exportBundle() },
+                    { id: "run-sheet", label: "Run sheet", emphasis: "tertiary", overflowOnly: true, disabled: busy || !visibleShapes.length, onClick: printRunSheet },
+                  ]}
+                />
                 <ScientificPreflightSummary
                   className="export-preflight"
                   title="Printer preflight"
@@ -1431,22 +1464,6 @@ export default function Home() {
                     { id: "feature", label: "Minimum feature", state: minimumFeature === null ? "not-run" : minimumFeature < 36 ? "warning" : "passed", value: minimumFeature === null ? "Not estimated" : `${minimumFeature.toFixed(1)} µm`, detail: minimumFeature !== null && minimumFeature < 36 ? "Below two native LCD pixels; inspect rasterization carefully." : undefined },
                   ]}
                 />
-                <Layer className="export-dock" withBackground>
-                  <Button className="primary-action" kind="primary" size="lg" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportGoo()}>
-                    {busy ? "Processing…" : "Generate .GOO"}
-                  </Button>
-                  <div className="export-options">
-                    <Button className="secondary-action" kind="secondary" size="md" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportPng()}>
-                      Verification PNG
-                    </Button>
-                    <Button className="secondary-action bundle-action" kind="secondary" size="md" disabled={busy || !visibleShapes.length || outsideScreen} onClick={() => void exportBundle()}>
-                      Experiment bundle (.zip)
-                    </Button>
-                    <Button className="secondary-action print-action" kind="tertiary" size="md" disabled={busy || !visibleShapes.length} onClick={printRunSheet}>
-                      Experimental run sheet
-                    </Button>
-                  </div>
-                </Layer>
                 {exportReceipt && (
                   <SharedExportReceipt
                     className="export-receipt"

@@ -44,7 +44,9 @@ test("exports the GDS2GOO application shell", async () => {
   assert.match(source, /Dry LCD exposure/);
   assert.match(source, /Process metadata/);
   assert.match(source, /Substrate &amp; alignment/);
-  assert.match(source, /className="export-dock"/);
+  assert.match(source, /<ScientificOutcomeSummary\b/);
+  assert.match(source, /"Generation outcome"/);
+  assert.doesNotMatch(source, /className="export-dock"/);
   const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
   const tokens = await readFile(new URL("../tokens.css", import.meta.url), "utf8");
   assert.match(styles, /Carbon g10 owns the application UI/);
