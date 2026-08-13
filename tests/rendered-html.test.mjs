@@ -17,7 +17,7 @@ test("exports the GDS2GOO application shell", async () => {
   for (const section of ["Input", "Layout", "Process", "Review"]) assert.match(html, new RegExp(`>${section}<`));
   assert.match(html, /Start a mask/);
   assert.match(html, /Open GDS/);
-  assert.match(html, /Try UV example/);
+  assert.match(html, /Load UV example/);
   assert.match(source, /Generate \.GOO/);
   assert.match(source, /Zoom/);
   assert.match(source, /Pixel grid/);
