@@ -20,7 +20,7 @@
   "dependencies": {
     "@carbon/react": "1.113.0",
     "@ibm/plex": "6.4.1",
-    "@jorpago2/scientific-ui": "file:vendor\\jorpago2-scientific-ui-0.12.0.tgz",
+    "@jorpago2/scientific-ui": "file:vendor\\jorpago2-scientific-ui-0.13.0.tgz",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

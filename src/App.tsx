@@ -42,6 +42,7 @@ import {
   ScientificTaskPanel,
   ScientificToolRail,
   type ScientificState,
+  useScientificResultTransition,
 } from "@jorpago2/scientific-ui";
 import { buildGooFile, encodeBinaryLayer, MARS_4_9K, validateGooFile } from "@/lib/goo.js";
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "@/lib/calibration.js";
@@ -308,6 +309,7 @@ export default function Home() {
   const logoExampleButton = useRef<HTMLButtonElement>(null);
   const preview = useRef<HTMLCanvasElement>(null);
   const inspector = useRef<HTMLCanvasElement>(null);
+  const exportOutcomeHeading = useRef<HTMLHeadingElement>(null);
   const previewPanel = useRef<HTMLElement>(null);
   const lcdGrid = useRef<HTMLDivElement>(null);
   const [model, setModel] = useState<ReturnType<typeof parseGds> | null>(null);
@@ -360,6 +362,12 @@ export default function Home() {
   const [responseProfiles, setResponseProfiles] = useState<Record<string, ResistResponseProfile>>({});
   const [sourceInfo, setSourceInfo] = useState<SourceInfo | null>(null);
   const [exportReceipt, setExportReceipt] = useState<ExportReceipt | null>(null);
+  useScientificResultTransition({
+    state: busy ? "running" : exportReceipt?.kind === "success" ? "up-to-date" : exportReceipt?.kind === "error" ? "failed" : "ready",
+    resultRef: exportOutcomeHeading,
+    completionKey: exportReceipt?.timestamp,
+    onReveal: () => setActivePanel("export"),
+  });
   const calibrationMode = sourceInfo?.kind === "generated-calibration";
   const photoresistPreset = PHOTORESISTS_405_NM.find(({ id }) => id === photoresistPresetId);
   const savedResponseProfile = photoresistPresetId ? responseProfiles[photoresistPresetId] : undefined;
@@ -1420,6 +1428,7 @@ export default function Home() {
                 <ScientificOutcomeSummary
                   className="export-outcome"
                   headingLevel={3}
+                  headingRef={exportOutcomeHeading}
                   title={exportReceipt?.kind === "success" ? "Machine file generated" : exportReceipt?.kind === "error" ? "Generation failed" : "Generation outcome"}
                   status={busy
                     ? { state: "running", label: "Generating files", detail: message }
@@ -1438,8 +1447,8 @@ export default function Home() {
                       ? exportReceipt.validation
                       : "Generate the printer file only after reviewing geometry, polarity, orientation and minimum feature size."}
                   metrics={[
-                    { id: "geometry", label: "Exported geometry", value: repeatedShapes.length.toLocaleString("en-US"), unit: "objects" },
-                    { id: "minimum-feature", label: "Minimum feature", value: minimumFeature === null ? "Not estimated" : minimumFeature.toFixed(1), unit: minimumFeature === null ? undefined : "µm", status: minimumFeature !== null && minimumFeature < 36 ? "warning" : "neutral" },
+                    { id: "geometry", label: "Exported geometry", value: repeatedShapes.length, unit: "objects", format: { notation: "standard", significantDigits: 8 } },
+                    { id: "minimum-feature", label: "Minimum feature", value: minimumFeature === null ? "Not estimated" : minimumFeature, unit: minimumFeature === null ? undefined : "µm", format: { significantDigits: 4 }, status: minimumFeature !== null && minimumFeature < 36 ? "warning" : "neutral" },
                     { id: "copies", label: "Step-and-repeat", value: `${repeatRows} × ${repeatColumns}` },
                   ]}
                   actions={[
@@ -1692,7 +1701,7 @@ export default function Home() {
                   <p>Open a GDSII layout or try the UV example to preview it at physical scale.</p>
                   <div className="empty-preview-actions">
                     <FileUploaderButton id="empty-gds-file" accept={[".gds", ".gdsii"]} buttonKind="primary" size="sm" disabled={busy} labelText="Open GDS" onChange={(event) => void loadFile(event.target.files?.[0])} />
-                    <Button kind="secondary" size="sm" disabled={busy} onClick={() => void loadLogoExample()}>Try UV example</Button>
+                    <Button kind="secondary" size="sm" disabled={busy} onClick={() => void loadLogoExample()}>Load UV example</Button>
                   </div>
                   <small>GDS/GDSII · maximum 100 MB</small>
                 </div>
