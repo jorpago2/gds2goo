@@ -1141,7 +1141,7 @@ export default function Home() {
       header={<ScientificHeader
         aria-label="GDS2GOO"
         product="GDS2GOO"
-        productMark="G"
+        productIcon="gds-layout"
         descriptor="Mask conversion"
         href="#workspace"
         contextLabel="Current workspace"
