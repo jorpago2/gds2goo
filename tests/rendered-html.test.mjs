@@ -54,7 +54,7 @@ test("exports the GDS2GOO application shell", async () => {
   assert.doesNotMatch(styles, /tailwindcss|@theme inline/);
   assert.match(source, /<ScientificHeader\b/);
   assert.match(source, /product="GDS2GOO"/);
-  assert.match(source, /productMark="G"/);
+  assert.match(source, /productIcon="gds-layout"/);
   assert.match(source, /className="workflow-navigation"/);
   assert.match(source, /<ScientificAppShell\b/);
   assert.match(source, /panelOpen=\{Boolean\(activePanel\)\}/);
