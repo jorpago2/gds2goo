@@ -1,6 +1,6 @@
 "use client";
 
-import { MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Accordion,
   AccordionItem,
@@ -35,14 +35,17 @@ import {
   ExportReceipt as SharedExportReceipt,
   InspectorPanel,
   ScientificAppShell,
+  ScientificAutosaveStatus,
   ScientificHeader,
   ScientificOutcomeSummary,
   ScientificPreflightSummary,
+  ScientificRecoveryNotice,
   ScientificStatusBar,
   ScientificTaskPanel,
   ScientificToolRail,
   type ScientificState,
   useScientificResultTransition,
+  useScientificAutosave,
 } from "@jorpago2/scientific-ui";
 import { buildGooFile, encodeBinaryLayer, MARS_4_9K, validateGooFile } from "@/lib/goo.js";
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "@/lib/calibration.js";
@@ -140,6 +143,36 @@ type ExportReceipt = {
   geometryCount: number;
   transform: string;
   validation: string;
+};
+
+type GdsSession = {
+  sourceInfo: SourceInfo;
+  fileName: string;
+  topCell: string;
+  shapes: ReturnType<typeof flattenGds>;
+  selectedLayers: number[];
+  settings: MaskSettings;
+  substrate: {
+    templateId: string;
+    marker: "round" | "flat" | "notch";
+    included: boolean;
+    lineWidth: number;
+    offsetX: number;
+    offsetY: number;
+    rotation: number;
+    edgeExclusion: number;
+    width: number;
+    height: number;
+    flatLength: number;
+    alignmentStyle: "none" | "crosses" | "corners" | "targets" | "ruler" | "full";
+    alignmentSize: number;
+  };
+  repeat: { rows: number; columns: number; pitchX: number; pitchY: number };
+  layerExposures: Record<number, number>;
+  calibrationSeries: string;
+  process: ProcessMetadata;
+  photoresistPresetId: string;
+  response: { thresholdSeconds: number; contrast: number; opticalBlurMicrometers: number; irradianceMwCm2: string; irradianceIsEstimated: boolean };
 };
 
 const DEFAULT_PROCESS: ProcessMetadata = {
@@ -1112,6 +1145,88 @@ export default function Home() {
         : sourceInfo
           ? "ready"
           : "needs-input";
+  const session = useMemo<GdsSession | null>(() => sourceInfo ? ({
+    sourceInfo,
+    fileName,
+    topCell,
+    shapes,
+    selectedLayers,
+    settings,
+    substrate: {
+      templateId: substrateTemplateId,
+      marker: waferMarker,
+      included: includeSubstrateOutline,
+      lineWidth: substrateLineWidth,
+      offsetX: substrateOffsetX,
+      offsetY: substrateOffsetY,
+      rotation: substrateRotation,
+      edgeExclusion,
+      width: customWidth,
+      height: customHeight,
+      flatLength: customFlatLength,
+      alignmentStyle,
+      alignmentSize,
+    },
+    repeat: { rows: repeatRows, columns: repeatColumns, pitchX: repeatPitchX, pitchY: repeatPitchY },
+    layerExposures,
+    calibrationSeries,
+    process: processMetadata,
+    photoresistPresetId,
+    response: {
+      thresholdSeconds: responseThresholdSeconds,
+      contrast: responseContrast,
+      opticalBlurMicrometers,
+      irradianceMwCm2: responseIrradianceMwCm2,
+      irradianceIsEstimated: responseIrradianceIsEstimated,
+    },
+  }) : null, [alignmentSize, alignmentStyle, calibrationSeries, customFlatLength, customHeight, customWidth, edgeExclusion, fileName, includeSubstrateOutline, layerExposures, opticalBlurMicrometers, photoresistPresetId, processMetadata, repeatColumns, repeatPitchX, repeatPitchY, repeatRows, responseContrast, responseIrradianceIsEstimated, responseIrradianceMwCm2, responseThresholdSeconds, selectedLayers, settings, shapes, sourceInfo, substrateLineWidth, substrateOffsetX, substrateOffsetY, substrateRotation, substrateTemplateId, topCell, waferMarker]);
+  const restoreSession = useCallback((saved: GdsSession | null) => {
+    if (!saved) return;
+    setModel(null);
+    setSourceInfo(saved.sourceInfo);
+    setFileName(saved.fileName);
+    setTopCell(saved.topCell);
+    setShapes(saved.shapes);
+    setSelectedLayers(saved.selectedLayers);
+    setSettings(saved.settings);
+    setSubstrateTemplateId(saved.substrate.templateId);
+    setWaferMarker(saved.substrate.marker);
+    setIncludeSubstrateOutline(saved.substrate.included);
+    setSubstrateLineWidth(saved.substrate.lineWidth);
+    setSubstrateOffsetX(saved.substrate.offsetX);
+    setSubstrateOffsetY(saved.substrate.offsetY);
+    setSubstrateRotation(saved.substrate.rotation);
+    setEdgeExclusion(saved.substrate.edgeExclusion);
+    setCustomWidth(saved.substrate.width);
+    setCustomHeight(saved.substrate.height);
+    setCustomFlatLength(saved.substrate.flatLength);
+    setAlignmentStyle(saved.substrate.alignmentStyle);
+    setAlignmentSize(saved.substrate.alignmentSize);
+    setRepeatRows(saved.repeat.rows);
+    setRepeatColumns(saved.repeat.columns);
+    setRepeatPitchX(saved.repeat.pitchX);
+    setRepeatPitchY(saved.repeat.pitchY);
+    setLayerExposures(saved.layerExposures);
+    setCalibrationSeries(saved.calibrationSeries);
+    setProcessMetadata(saved.process);
+    setPhotoresistPresetId(saved.photoresistPresetId);
+    setResponseThresholdSeconds(saved.response.thresholdSeconds);
+    setResponseContrast(saved.response.contrast);
+    setOpticalBlurMicrometers(saved.response.opticalBlurMicrometers);
+    setResponseIrradianceMwCm2(saved.response.irradianceMwCm2);
+    setResponseIrradianceIsEstimated(saved.response.irradianceIsEstimated);
+    setExportReceipt(null);
+    setMessage("Previous mask configuration restored. Verify the preview before exporting.");
+  }, []);
+  const autosave = useScientificAutosave({
+    storageKey: "gds2goo:session",
+    value: session,
+    onRestore: restoreSession,
+    schemaVersion: 1,
+    maxBytes: 3_000_000,
+    shouldSave: (value) => value !== null,
+  });
+
   const inspectorPanel = (
     <InspectorPanel open={showInspector} title="Native 1:1 inspector" onClose={() => setInspectorOpen(false)}>
       <div className="pixel-inspector">
@@ -1134,11 +1249,11 @@ export default function Home() {
       aria-label="Mask status"
       status={{ state: scientificState, label: message }}
       metadata={(
-        <dl className="status-metrics">
+        <><ScientificAutosaveStatus status={autosave.status} savedAt={autosave.lastSavedAt} /><dl className="status-metrics">
           <div><dt>Layout</dt><dd>{bounds ? `${(bounds.width / 1000).toFixed(3)} × ${(bounds.height / 1000).toFixed(3)} mm` : "—"}</dd></div>
           <div><dt>Minimum feature</dt><dd className={minimumFeature !== null && minimumFeature < 36 ? "warn" : ""}>{minimumFeature === null ? "—" : `${minimumFeature.toFixed(1)} µm`}</dd></div>
           <div><dt>Layers</dt><dd>{selectedLayers.length || "—"}</dd></div>
-        </dl>
+        </dl></>
       )}
     />
   );
@@ -1146,6 +1261,7 @@ export default function Home() {
   return (
     <ScientificAppShell
       className="gds2goo-shell"
+      recovery={autosave.recovery && <ScientificRecoveryNotice savedAt={autosave.recovery.savedAt} onRestore={autosave.restore} onDiscard={autosave.discard} />}
       panelOpen={Boolean(activePanel)}
       header={<ScientificHeader
         aria-label="GDS2GOO"
