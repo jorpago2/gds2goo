@@ -11,6 +11,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build && vite build --ssr src/entry-server.tsx --outDir .ssr && node scripts/prerender.mjs",
     "test": "pnpm build && node --test tests/*.test.mjs",
+    "test:ui": "playwright test",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -25,7 +26,9 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.10.2",
     "@eslint/js": "10.0.1",
+    "@playwright/test": "1.62.1",
     "@storybook/react-vite": "^10.5.7",
     "@types/node": "24.13.3",
     "@types/react": "19.2.18",

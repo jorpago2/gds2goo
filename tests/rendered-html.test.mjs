@@ -26,6 +26,9 @@ test("exports the GDS2GOO application shell", async () => {
   assert.match(photoresists, /MICROPOSIT S1805/);
   assert.match(photoresists, /AR-N 4400-10/);
   assert.match(source, /UV logo GDS example/);
+  assert.doesNotMatch(source, /logoExampleButton\.current\?\.click/);
+  assert.match(source, /rasterizeMaskInWorker/);
+  assert.match(source, /Cancel generation/);
   assert.match(source, /Substrate outline/);
   assert.match(source, /Measure/);
   assert.match(source, /Full screen/);

@@ -47,7 +47,7 @@ import {
   useScientificResultTransition,
   useScientificAutosave,
 } from "@jorpago2/scientific-ui";
-import { buildGooFile, encodeBinaryLayer, MARS_4_9K, validateGooFile } from "@/lib/goo.js";
+import { buildGooFile, MARS_4_9K, validateGooFile } from "@/lib/goo.js";
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "@/lib/calibration.js";
 import { fitsSubstrateArea, repeatShapes, requiresSubstrateValidation, transformGuideShapes } from "@/lib/experiment.js";
 import { createRunManifest, parseRunManifest } from "@/lib/manifest.js";
@@ -57,11 +57,17 @@ import {
   PHOTORESISTS_405_NM,
   savePhotoresistResponseProfile,
 } from "@/lib/photoresists.js";
-import { createMonochromePreview, mergeBinaryOverlay, rasterizeBinaryMask } from "@/lib/raster.js";
+import { mergeBinaryOverlay, rasterizeBinaryMask } from "@/lib/raster.js";
 import { parseRecipeLibrary, saveRecipeToLibrary } from "@/lib/recipes.js";
 import { createAlignmentMarkShapes, createSubstrateOutlineShape } from "@/lib/substrate.js";
 import { calculateResistResponse, calculateViewerRasterSize, calculateViewerZoom } from "@/lib/viewer.js";
 import { buildZip } from "@/lib/zip.js";
+import {
+  cancelMaskExport,
+  rasterizeMaskInWorker,
+  type ExportProgress,
+  type MaskExportResult,
+} from "./workers/maskExportClient";
 
 type MaskSettings = {
   exposure: number;
@@ -221,37 +227,6 @@ function combinedMask(
   return pixels;
 }
 
-function nativeMask(
-  shapes: ReturnType<typeof flattenGds>,
-  settings: MaskSettings,
-  substrateShapes: ReturnType<typeof flattenGds>,
-) {
-  return combinedMask(shapes, settings, substrateShapes, {
-    width: MARS_4_9K.width,
-    height: MARS_4_9K.height,
-    pixelMicrometers: MARS_4_9K.pixelMicrometers,
-  });
-}
-
-function rasterizeMask(
-  shapes: ReturnType<typeof flattenGds>,
-  settings: MaskSettings,
-  substrateShapes: ReturnType<typeof flattenGds>,
-) {
-  const pixels = nativeMask(shapes, settings, substrateShapes);
-  const encoded = encodeBinaryLayer(
-    (y: number) => pixels.subarray(y * MARS_4_9K.width, (y + 1) * MARS_4_9K.width),
-    MARS_4_9K.width,
-    MARS_4_9K.height,
-  );
-  return {
-    pixels,
-    encoded,
-    smallPreview: createMonochromePreview(pixels, MARS_4_9K.width, MARS_4_9K.height, 116, 116, settings.inverted ? 1 : 0),
-    bigPreview: createMonochromePreview(pixels, MARS_4_9K.width, MARS_4_9K.height, 290, 290, settings.inverted ? 1 : 0),
-  };
-}
-
 function drawBinaryPixels(canvas: HTMLCanvasElement, pixels: Uint8Array, width: number, height: number) {
   canvas.width = width;
   canvas.height = height;
@@ -314,19 +289,6 @@ function saveFile(bytes: BlobPart, name: string, type: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-async function encodePng(pixels: Uint8Array) {
-  const canvas = document.createElement("canvas");
-  try {
-    drawBinaryPixels(canvas, pixels, MARS_4_9K.width, MARS_4_9K.height);
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-    if (!blob) throw new Error("The browser could not encode the PNG.");
-    return new Uint8Array(await blob.arrayBuffer());
-  } finally {
-    canvas.width = 1;
-    canvas.height = 1;
-  }
-}
-
 async function sha256Hex(buffer: ArrayBuffer) {
   if (!globalThis.crypto?.subtle) return null;
   const digest = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", buffer));
@@ -339,7 +301,6 @@ function boundedNumber(value: string, current: number, minimum: number, maximum:
 }
 
 export default function Home() {
-  const logoExampleButton = useRef<HTMLButtonElement>(null);
   const preview = useRef<HTMLCanvasElement>(null);
   const inspector = useRef<HTMLCanvasElement>(null);
   const exportOutcomeHeading = useRef<HTMLHeadingElement>(null);
@@ -353,6 +314,7 @@ export default function Home() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [message, setMessage] = useState("Load a GDSII file to begin.");
   const [busy, setBusy] = useState(false);
+  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
   const [previewZoom, setPreviewZoom] = useState(1);
   const [showPreviewGrid, setShowPreviewGrid] = useState(false);
   const [showResistResponse, setShowResistResponse] = useState(false);
@@ -423,10 +385,11 @@ export default function Home() {
     const frame = requestAnimationFrame(() => {
       setRecipes(parseRecipeLibrary(localStorage.getItem("gds2goo-recipes")) as SavedRecipe[]);
       setResponseProfiles(parsePhotoresistResponseProfiles(localStorage.getItem("gds2goo-resist-response-profiles")) as Record<string, ResistResponseProfile>);
-      logoExampleButton.current?.click();
     });
     return () => cancelAnimationFrame(frame);
   }, []);
+
+  useEffect(() => () => cancelMaskExport(), []);
 
   useEffect(() => {
     const updateFullscreenState = () => setIsFullscreen(document.fullscreenElement === previewPanel.current);
@@ -900,7 +863,7 @@ export default function Home() {
     });
   }
 
-  function buildValidatedGoo(raster: ReturnType<typeof rasterizeMask>, exposure: number) {
+  function buildValidatedGoo(raster: MaskExportResult, exposure: number) {
     const goo = buildGooFile({
       layerData: raster.encoded.data,
       exposureSeconds: exposure,
@@ -926,11 +889,16 @@ export default function Home() {
 
   async function runExport(format: string, startMessage: string, fallbackMessage: string, operation: () => Promise<void>) {
     setBusy(true);
+    setExportProgress(null);
     setMessage(startMessage);
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     try {
       await operation();
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setMessage("Mask generation cancelled. No file was generated.");
+        return;
+      }
       const failure = error instanceof Error ? error.message : fallbackMessage;
       setMessage(failure);
       setExportReceipt({
@@ -944,14 +912,20 @@ export default function Home() {
         validation: failure,
       });
     } finally {
+      setExportProgress(null);
       setBusy(false);
     }
+  }
+
+  function cancelActiveExport() {
+    cancelMaskExport();
+    setMessage("Cancelling mask generation…");
   }
 
   async function exportGoo() {
     if (!visibleShapes.length || outsideScreen) return;
     await runExport("GOO + run manifest", "Rasterizing 36.8 million pixels locally…", "The GOO file could not be generated.", async () => {
-      const raster = rasterizeMask(repeatedShapes, settings, exportedSubstrateShapes);
+      const raster = await rasterizeMaskInWorker(repeatedShapes, settings, exportedSubstrateShapes, false, setExportProgress);
       const { goo, check } = buildValidatedGoo(raster, settings.exposure);
       const baseName = outputBaseName();
       const gooName = `${baseName}.goo`;
@@ -967,7 +941,7 @@ export default function Home() {
     await runExport("Calibration experiment ZIP", "Preparing calibration exposure series…", "The calibration series could not be generated.", async () => {
       const exposures = parseExposureSeries(calibrationSeries);
       setMessage(`Rasterizing calibration series for ${exposures.length} exposure(s)…`);
-      const raster = rasterizeMask(repeatedShapes, settings, exportedSubstrateShapes);
+      const raster = await rasterizeMaskInWorker(repeatedShapes, settings, exportedSubstrateShapes, true, setExportProgress);
       const outputNames: string[] = [];
       const entries: Array<{ name: string; data: Uint8Array | string }> = [];
       for (const exposure of exposures) {
@@ -978,7 +952,8 @@ export default function Home() {
         entries.push({ name: outputName, data: goo });
       }
       const pngName = "calibration-line-space-8520x4320.png";
-      entries.push({ name: pngName, data: await encodePng(raster.pixels) });
+      if (!raster.png) throw new Error("The verification PNG was not returned by the export worker.");
+      entries.push({ name: pngName, data: raster.png });
       outputNames.push(pngName);
       entries.push({ name: "calibration-line-space.run.json", data: JSON.stringify(buildManifest(exposures, outputNames), null, 2) });
       saveFile(buildZip(entries), "calibration-line-space.experiment.zip", "application/zip");
@@ -1007,7 +982,7 @@ export default function Home() {
             pitchXMicrometers: repeatPitchX,
             pitchYMicrometers: repeatPitchY,
           });
-          const raster = rasterizeMask(layerShapes, settings, index === 0 ? exportedSubstrateShapes : []);
+          const raster = await rasterizeMaskInWorker(layerShapes, settings, index === 0 ? exportedSubstrateShapes : [], false, setExportProgress);
           const { goo } = buildValidatedGoo(raster, exposure);
           const exposureLabel = String(exposure).replace(".", "p");
           const name = `${outputBaseName()}-L${layer}-${exposureLabel}s.goo`;
@@ -1044,17 +1019,17 @@ export default function Home() {
   async function exportBundle() {
     if (!visibleShapes.length || outsideScreen) return;
     await runExport("Experiment ZIP", "Building reproducible experiment package…", "The experiment package could not be generated.", async () => {
-      const raster = rasterizeMask(repeatedShapes, settings, exportedSubstrateShapes);
+      const raster = await rasterizeMaskInWorker(repeatedShapes, settings, exportedSubstrateShapes, true, setExportProgress);
       const baseName = outputBaseName();
       const gooName = `${baseName}.goo`;
       const pngName = `${baseName}-8520x4320.png`;
       const manifestName = `${baseName}.run.json`;
       const { goo } = buildValidatedGoo(raster, settings.exposure);
-      const png = await encodePng(raster.pixels);
+      if (!raster.png) throw new Error("The verification PNG was not returned by the export worker.");
       const manifest = JSON.stringify(buildManifest([settings.exposure], [gooName, pngName]), null, 2);
       const zip = buildZip([
         { name: gooName, data: goo },
-        { name: pngName, data: png },
+        { name: pngName, data: raster.png },
         { name: manifestName, data: manifest },
       ]);
       saveFile(zip, `${baseName}.experiment.zip`, "application/zip");
@@ -1066,9 +1041,10 @@ export default function Home() {
   async function exportPng() {
     if (!visibleShapes.length || outsideScreen) return;
     await runExport("Verification PNG", "Generating 9K verification PNG…", "The PNG could not be generated.", async () => {
-      const png = await encodePng(nativeMask(repeatedShapes, settings, exportedSubstrateShapes));
+      const raster = await rasterizeMaskInWorker(repeatedShapes, settings, exportedSubstrateShapes, true, setExportProgress);
+      if (!raster.png) throw new Error("The verification PNG was not returned by the export worker.");
       const pngName = `${fileName.replace(/\.gds(ii)?$/i, "") || "mask"}-8520x4320.png`;
-      saveFile(png, pngName, "image/png");
+      saveFile(new Uint8Array(raster.png), pngName, "image/png");
       setMessage("9K PNG generated. Use it to verify orientation and polarity.");
       recordExport("Verification PNG", pngName, "Native 8520 × 4320 orientation and polarity image generated.");
     });
@@ -1307,7 +1283,7 @@ export default function Home() {
                   id="gds-file"
                   className="gds-uploader"
                   accept={[".gds", ".gdsii"]}
-                  maxFileSize={100 * 1024 * 1024}
+                  maxFileSize={25 * 1024 * 1024}
                   labelText={fileName ? "Replace GDSII file" : "Drop or select a GDSII file · max. 25 MB"}
                   onAddFiles={(_event, { addedFiles }) => void loadFile(addedFiles[0])}
                 />
@@ -1315,7 +1291,7 @@ export default function Home() {
                 <div className="source-actions">
                   <Button kind="tertiary" size="sm" disabled={busy} onClick={loadCalibrationPattern}>18–180 µm calibration</Button>
                   <Button kind="tertiary" size="sm" disabled={busy} onClick={loadOrientationPattern}>Printer orientation check</Button>
-                  <Button ref={logoExampleButton} kind="tertiary" size="sm" disabled={busy} title="40.0 × 13.4 mm · layer 1 · 22.2 µm source grid" onClick={() => void loadLogoExample()}>UV logo GDS example</Button>
+                  <Button kind="tertiary" size="sm" disabled={busy} title="40.0 × 13.4 mm · layer 1 · 22.2 µm source grid" onClick={() => void loadLogoExample()}>UV logo GDS example</Button>
                   <FileUploaderButton id="run-file" accept={[".json", "application/json"]} buttonKind="tertiary" size="sm" disabled={busy} labelText="Restore .run.json" onChange={(event) => void restoreRun(event.target.files?.[0])} />
                 </div>
 
@@ -1556,12 +1532,14 @@ export default function Home() {
                           ? { state: "failed", label: "Export blocked" }
                           : outsideSubstrate || minimumFeature === null || minimumFeature < 36
                             ? { state: "warning", label: "Review before generation" }
-                            : { state: "ready", label: "Ready to generate" }}
+                            : { state: "ready", label: "Ready to generate", detail: message }}
                   summary={exportReceipt?.kind === "success"
                     ? `${exportReceipt.filename} was generated from the current transform and geometry. Keep the run manifest with the machine file.`
                     : exportReceipt?.kind === "error"
                       ? exportReceipt.validation
-                      : "Generate the printer file only after reviewing geometry, polarity, orientation and minimum feature size."}
+                      : message.startsWith("Mask generation cancelled")
+                        ? message
+                        : "Generate the printer file only after reviewing geometry, polarity, orientation and minimum feature size."}
                   metrics={[
                     { id: "geometry", label: "Exported geometry", value: repeatedShapes.length, unit: "objects", format: { notation: "standard", significantDigits: 8 } },
                     { id: "minimum-feature", label: "Minimum feature", value: minimumFeature === null ? "Not estimated" : minimumFeature, unit: minimumFeature === null ? undefined : "µm", format: { significantDigits: 4 }, status: minimumFeature !== null && minimumFeature < 36 ? "warning" : "neutral" },
@@ -1574,6 +1552,13 @@ export default function Home() {
                     { id: "run-sheet", label: "Run sheet", emphasis: "tertiary", overflowOnly: true, disabled: busy || !visibleShapes.length, onClick: printRunSheet },
                   ]}
                 />
+                {busy && exportProgress && (
+                  <div className="export-progress" role="status" aria-live="polite">
+                    <p>{exportProgress.stage} · {Math.round(exportProgress.completed * 100)}%</p>
+                    <progress max={1} value={exportProgress.completed}>{Math.round(exportProgress.completed * 100)}%</progress>
+                    <Button kind="danger--tertiary" size="sm" onClick={cancelActiveExport}>Cancel generation</Button>
+                  </div>
+                )}
                 <ScientificPreflightSummary
                   className="export-preflight"
                   title="Printer preflight"
