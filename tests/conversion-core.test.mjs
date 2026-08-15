@@ -380,3 +380,14 @@ test("builds a readable store-only ZIP archive", () => {
   assert.equal(view.getUint32(zip.length - 22, true), 0x06054b50);
   assert.throws(() => buildZip([{ name: "../unsafe", data: "x" }]), /filename/);
 });
+
+test("rejects an expansive AREF before materializing its instances", () => {
+  const model = {
+    unitMicrometers: 1,
+    structures: new Map([
+      ["TOP", { elements: [{ kind: 0x0b, sname: "UNIT", rows: 65_535, columns: 65_535, mag: 1, angle: 0, reflect: false, points: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }] }] }],
+      ["UNIT", { elements: [{ kind: 0x08, layer: 1, datatype: 0, width: 0, pathType: 0, points: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }] }] }],
+    ]),
+  };
+  assert.throws(() => flattenGds(model, "TOP", { maxInstances: 1_000, maxShapes: 1_000, maxPoints: 10_000 }), /AREF.*safety limit/);
+});

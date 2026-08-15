@@ -641,8 +641,8 @@ export default function Home() {
       setMessage("Select a .gds or .gdsii file.");
       return;
     }
-    if (file.size > 100 * 1024 * 1024) {
-      setMessage("The GDS exceeds the local 100 MB limit.");
+    if (file.size > 25 * 1024 * 1024) {
+      setMessage("The GDS exceeds the local 25 MB browser safety limit.");
       return;
     }
     try {
@@ -1308,7 +1308,7 @@ export default function Home() {
                   className="gds-uploader"
                   accept={[".gds", ".gdsii"]}
                   maxFileSize={100 * 1024 * 1024}
-                  labelText={fileName ? "Replace GDSII file" : "Drop or select a GDSII file · max. 100 MB"}
+                  labelText={fileName ? "Replace GDSII file" : "Drop or select a GDSII file · max. 25 MB"}
                   onAddFiles={(_event, { addedFiles }) => void loadFile(addedFiles[0])}
                 />
 
@@ -1819,7 +1819,7 @@ export default function Home() {
                     <FileUploaderButton id="empty-gds-file" accept={[".gds", ".gdsii"]} buttonKind="primary" size="sm" disabled={busy} labelText="Open GDS" onChange={(event) => void loadFile(event.target.files?.[0])} />
                     <Button kind="secondary" size="sm" disabled={busy} onClick={() => void loadLogoExample()}>Load UV example</Button>
                   </div>
-                  <small>GDS/GDSII · maximum 100 MB</small>
+                  <small>GDS/GDSII · maximum 25 MB; hierarchy expansion is budgeted</small>
                 </div>
               )}
             </div>
