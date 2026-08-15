@@ -1237,11 +1237,13 @@ export default function Home() {
   return (
     <ScientificAppShell
       className="gds2goo-shell"
+      previewStageWhenPanelOpen
       recovery={autosave.recovery && <ScientificRecoveryNotice savedAt={autosave.recovery.savedAt} onRestore={autosave.restore} onDiscard={autosave.discard} />}
       panelOpen={Boolean(activePanel)}
       header={<ScientificHeader
         aria-label="GDS2GOO"
         product="GDS2GOO"
+        compactProduct="GDS2GOO"
         productIcon="gds-layout"
         descriptor="Mask conversion"
         href="#workspace"
