@@ -22,16 +22,45 @@ test('generates the diagnostic source and exposes a cancellable worker export', 
   await page.getByRole('button', { name: 'Printer orientation check' }).click()
   await expect(page.getByRole('banner')).toContainText('mars4-9k-orientation-check')
   await page.getByRole('button', { name: 'Review' }).click()
-  const cancellation = page.waitForFunction(() => {
-    const button = [...document.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === 'Cancel generation')
-    if (!(button instanceof HTMLButtonElement)) return false
-    button.click()
-    return true
-  }, undefined, { polling: 10 })
   await page.getByRole('button', { name: 'Generate .GOO' }).click()
-  await cancellation
+  await page.getByRole('button', { name: 'Cancel generation' }).click({ force: true })
   await expect(page.getByRole('region', { name: 'Generation outcome' }).getByText('Mask generation cancelled. No file was generated.').first()).toBeVisible()
   await expect(page.getByText('Machine file generated')).toHaveCount(0)
+})
+
+test('keeps panel and inspector interaction keyboard-owned', async ({ page }) => {
+  await page.goto('./')
+  await page.getByRole('button', { name: 'UV logo GDS example' }).click()
+
+  const inputTool = page.getByRole('button', { name: 'Input', exact: true })
+  await page.keyboard.press('Escape')
+  await expect(inputTool).toBeFocused()
+  await expect(inputTool).not.toHaveAttribute('aria-current')
+  await expect(inputTool).toHaveAttribute('aria-controls', 'configuration-panel')
+
+  const preview = page.getByRole('button', { name: 'Inspect the current point at native pixel scale' })
+  const zoom = page.getByRole('slider', { name: 'Zoom' })
+  const zoomBeforeWheel = Number(await zoom.getAttribute('aria-valuenow'))
+  await preview.hover()
+  await page.mouse.wheel(0, -240)
+  await expect.poll(async () => Number(await zoom.getAttribute('aria-valuenow'))).toBeGreaterThan(zoomBeforeWheel)
+  await preview.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('dialog', { name: 'Native 1:1 inspector' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog', { name: 'Native 1:1 inspector' })).toHaveCount(0)
+  await expect(preview).toBeFocused()
+})
+
+test('renders the experimental run sheet in print media', async ({ page }) => {
+  await page.goto('./')
+  await page.getByRole('button', { name: 'Printer orientation check' }).click()
+  await page.emulateMedia({ media: 'print' })
+
+  const sheet = page.locator('.print-sheet')
+  await expect(sheet).toBeVisible()
+  expect((await sheet.boundingBox())?.height ?? 0).toBeGreaterThan(0)
+  await expect(page.getByText('LCD PREVIEW')).toBeHidden()
 })
 
 test('has no serious accessibility violations or horizontal overflow', async ({ page }, testInfo) => {

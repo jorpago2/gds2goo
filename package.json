@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build && vite build --ssr src/entry-server.tsx --outDir .ssr && node scripts/prerender.mjs",
+    "check:architecture": "node --test tests/react-ownership.test.mjs",
     "test": "pnpm build && node --test tests/*.test.mjs",
     "test:ui": "playwright test",
     "typecheck": "tsc --noEmit",

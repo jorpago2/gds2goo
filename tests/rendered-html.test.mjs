@@ -66,7 +66,7 @@ test("exports the GDS2GOO application shell", async () => {
   assert.match(source, /<InspectorPanel\b/);
   assert.match(source, /<ScientificStatusBar\b/);
   assert.doesNotMatch(source, /<(?:button|input|select|textarea|details|summary)\b/);
-  for (const component of ["Button", "NumberInput", "TextInput", "Select", "ComboBox", "Checkbox", "Toggle", "Accordion", "FileUploaderDropContainer", "FileUploaderButton", "InlineNotification", "Layer", "Link", "Tag"]) {
+  for (const component of ["Button", "NumberInput", "TextInput", "Select", "ComboBox", "Checkbox", "Toggle", "Accordion", "FileUploaderDropContainer", "FileUploaderButton", "InlineNotification", "Layer", "Link", "ProgressBar", "Tag"]) {
     assert.match(source, new RegExp(`<${component}\\b`));
   }
   assert.match(tokens, /--viewer-surface:/);

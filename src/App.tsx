@@ -1,6 +1,6 @@
 "use client";
 
-import { MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, WheelEvent as ReactWheelEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Accordion,
   AccordionItem,
@@ -13,9 +13,9 @@ import {
   Layer,
   Link,
   NumberInput,
+  ProgressBar,
   Select,
   SelectItem,
-  SelectItemGroup,
   Slider,
   Tag,
   TextArea,
@@ -46,6 +46,7 @@ import {
   type ScientificState,
   useScientificResultTransition,
   useScientificAutosave,
+  useScientificShortcut,
 } from "@jorpago2/scientific-ui";
 import { buildGooFile, MARS_4_9K, validateGooFile } from "@/lib/goo.js";
 import { createCalibrationShapes, createOrientationCheckShapes, parseExposureSeries } from "@/lib/calibration.js";
@@ -53,7 +54,6 @@ import { fitsSubstrateArea, repeatShapes, requiresSubstrateValidation, transform
 import { createRunManifest, parseRunManifest } from "@/lib/manifest.js";
 import {
   parsePhotoresistResponseProfiles,
-  PHOTORESIST_MANUFACTURERS_405_NM,
   PHOTORESISTS_405_NM,
   savePhotoresistResponseProfile,
 } from "@/lib/photoresists.js";
@@ -141,6 +141,7 @@ type SourceInfo = {
 };
 
 type ExportReceipt = {
+  basis: string;
   kind: "success" | "error";
   title: string;
   filename: string;
@@ -303,9 +304,10 @@ function boundedNumber(value: string, current: number, minimum: number, maximum:
 export default function Home() {
   const preview = useRef<HTMLCanvasElement>(null);
   const inspector = useRef<HTMLCanvasElement>(null);
+  const previewSurface = useRef<HTMLDivElement>(null);
   const exportOutcomeHeading = useRef<HTMLHeadingElement>(null);
   const previewPanel = useRef<HTMLElement>(null);
-  const lcdGrid = useRef<HTMLDivElement>(null);
+  const workflowItemRefs = useRef(new Map<string, HTMLButtonElement>());
   const [model, setModel] = useState<ReturnType<typeof parseGds> | null>(null);
   const [fileName, setFileName] = useState("");
   const [topCell, setTopCell] = useState("");
@@ -357,10 +359,24 @@ export default function Home() {
   const [responseProfiles, setResponseProfiles] = useState<Record<string, ResistResponseProfile>>({});
   const [sourceInfo, setSourceInfo] = useState<SourceInfo | null>(null);
   const [exportReceipt, setExportReceipt] = useState<ExportReceipt | null>(null);
+  const exportBasis = JSON.stringify({
+    source: sourceInfo && [sourceInfo.kind, sourceInfo.name, sourceInfo.sha256],
+    topCell,
+    selectedLayers,
+    settings,
+    substrate: [substrateTemplateId, waferMarker, includeSubstrateOutline, substrateLineWidth, substrateOffsetX, substrateOffsetY, substrateRotation, edgeExclusion, customWidth, customHeight, customFlatLength, alignmentStyle, alignmentSize],
+    repeat: [repeatRows, repeatColumns, repeatPitchX, repeatPitchY],
+    layerExposures,
+    calibrationSeries,
+    processMetadata,
+    photoresistPresetId,
+    response: [responseThresholdSeconds, responseContrast, opticalBlurMicrometers, responseIrradianceMwCm2, responseIrradianceIsEstimated],
+  });
+  const currentExportReceipt = exportReceipt?.basis === exportBasis ? exportReceipt : null;
   useScientificResultTransition({
-    state: busy ? "running" : exportReceipt?.kind === "success" ? "up-to-date" : exportReceipt?.kind === "error" ? "failed" : "ready",
+    state: busy ? "running" : currentExportReceipt?.kind === "success" ? "up-to-date" : currentExportReceipt?.kind === "error" ? "failed" : "ready",
     resultRef: exportOutcomeHeading,
-    completionKey: exportReceipt?.timestamp,
+    completionKey: currentExportReceipt?.timestamp,
     onReveal: () => setActivePanel("export"),
   });
   const calibrationMode = sourceInfo?.kind === "generated-calibration";
@@ -543,32 +559,28 @@ export default function Home() {
     context.strokeRect(inspection.x - offsetX + 0.25, inspection.y - offsetY + 0.25, 0.5, 0.5);
   }, [repeatedShapes, settings, inspection, exportedSubstrateShapes]);
 
-  useEffect(() => {
-    const grid = lcdGrid.current;
-    if (!grid) return;
-    const zoomWithWheel = (event: WheelEvent) => {
-      if (!repeatedShapes.length) return;
-      event.preventDefault();
-      const bounds = grid.getBoundingClientRect();
-      const cursorX = event.clientX - bounds.left;
-      const cursorY = event.clientY - bounds.top;
-      const deltaScale = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16
-        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? grid.clientHeight : 1;
-      const pixelDeltaY = event.deltaY * deltaScale;
-      setPreviewZoom((currentZoom) => {
-        const nextZoom = calculateViewerZoom(currentZoom, pixelDeltaY, event.ctrlKey);
-        if (nextZoom === currentZoom) return currentZoom;
-        requestAnimationFrame(() => {
-          const scale = nextZoom / currentZoom;
-          grid.scrollLeft = (grid.scrollLeft + cursorX) * scale - cursorX;
-          grid.scrollTop = (grid.scrollTop + cursorY) * scale - cursorY;
-        });
-        return nextZoom;
+  function zoomPreview(event: ReactWheelEvent<HTMLDivElement>) {
+    if (!repeatedShapes.length) return;
+    const grid = event.currentTarget;
+    const bounds = grid.getBoundingClientRect();
+    const cursorX = event.clientX - bounds.left;
+    const cursorY = event.clientY - bounds.top;
+    const initialScrollLeft = grid.scrollLeft;
+    const initialScrollTop = grid.scrollTop;
+    const deltaScale = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16
+      : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? grid.clientHeight : 1;
+    const pixelDeltaY = event.deltaY * deltaScale;
+    setPreviewZoom((currentZoom) => {
+      const nextZoom = calculateViewerZoom(currentZoom, pixelDeltaY, event.ctrlKey);
+      if (nextZoom === currentZoom) return currentZoom;
+      requestAnimationFrame(() => {
+        const scale = nextZoom / currentZoom;
+        grid.scrollLeft = (initialScrollLeft + cursorX) * scale - cursorX;
+        grid.scrollTop = (initialScrollTop + cursorY) * scale - cursorY;
       });
-    };
-    grid.addEventListener("wheel", zoomWithWheel, { passive: false });
-    return () => grid.removeEventListener("wheel", zoomWithWheel);
-  }, [repeatedShapes.length]);
+      return nextZoom;
+    });
+  }
 
   function inspectPreview(event: ReactMouseEvent<HTMLDivElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -576,6 +588,10 @@ export default function Home() {
       x: Math.max(0, Math.min(MARS_4_9K.width - 1, Math.floor((event.clientX - rect.left) / rect.width * MARS_4_9K.width))),
       y: Math.max(0, Math.min(MARS_4_9K.height - 1, Math.floor((event.clientY - rect.top) / rect.height * MARS_4_9K.height))),
     };
+    inspectPreviewPoint(point);
+  }
+
+  function inspectPreviewPoint(point: { x: number; y: number }) {
     setInspection(point);
     if (!measureMode) {
       if (window.matchMedia("(max-width: 75rem)").matches) setActivePanel(null);
@@ -876,6 +892,7 @@ export default function Home() {
 
   function recordExport(format: string, filename: string, validation: string) {
     setExportReceipt({
+      basis: exportBasis,
       kind: "success",
       title: "Export generated",
       filename,
@@ -889,6 +906,7 @@ export default function Home() {
 
   async function runExport(format: string, startMessage: string, fallbackMessage: string, operation: () => Promise<void>) {
     setBusy(true);
+    setExportReceipt(null);
     setExportProgress(null);
     setMessage(startMessage);
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -902,6 +920,7 @@ export default function Home() {
       const failure = error instanceof Error ? error.message : fallbackMessage;
       setMessage(failure);
       setExportReceipt({
+        basis: exportBasis,
         kind: "error",
         title: "Export failed",
         filename: "No file generated",
@@ -915,6 +934,12 @@ export default function Home() {
       setExportProgress(null);
       setBusy(false);
     }
+  }
+
+  function inspectPreviewWithKeyboard(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    inspectPreviewPoint(inspection);
   }
 
   function cancelActiveExport() {
@@ -1064,32 +1089,32 @@ export default function Home() {
     }
   }
 
-  function closePanel() {
+  const registerWorkflowItemRef = useCallback((id: string, node: HTMLButtonElement | null) => {
+    if (node) workflowItemRefs.current.set(id, node);
+    else workflowItemRefs.current.delete(id);
+  }, []);
+
+  const closePanel = useCallback(() => {
     const panel = activePanel;
     setActivePanel(null);
     window.requestAnimationFrame(() => {
-      window.dispatchEvent(new Event("resize"));
-      if (panel) document.getElementById(`workflow-${panel}`)?.focus();
+      if (panel) workflowItemRefs.current.get(panel)?.focus();
     });
-  }
+  }, [activePanel]);
 
-  useEffect(() => {
-    if (!activePanel && !inspectorOpen) return;
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.key !== "Escape") return;
-      event.preventDefault();
-      if (activePanel) {
-        const panel = activePanel;
-        setActivePanel(null);
-        window.requestAnimationFrame(() => {
-          window.dispatchEvent(new Event("resize"));
-          document.getElementById(`workflow-${panel}`)?.focus();
-        });
-      } else setInspectorOpen(false);
-    };
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
-  }, [activePanel, inspectorOpen]);
+  const closeOverlayShortcut = useMemo(() => ({
+    id: "close-active-overlay",
+    shortcut: "Escape",
+    displayKeys: ["Esc"],
+    description: "Close the active panel or inspector",
+    enabled: Boolean(activePanel || inspectorOpen),
+    priority: 100,
+    handler: () => {
+      if (activePanel) closePanel();
+      else setInspectorOpen(false);
+    },
+  }), [activePanel, closePanel, inspectorOpen]);
+  useScientificShortcut(closeOverlayShortcut);
 
   useEffect(() => {
     if (!activePanel || !inspectorOpen) return;
@@ -1204,7 +1229,7 @@ export default function Home() {
   });
 
   const inspectorPanel = (
-    <InspectorPanel open={showInspector} title="Native 1:1 inspector" onClose={() => setInspectorOpen(false)}>
+    <InspectorPanel open={showInspector} title="Native 1:1 inspector" triggerRef={previewSurface} onClose={() => setInspectorOpen(false)}>
       <div className="pixel-inspector">
         <canvas ref={inspector} aria-label={`Native LCD pixels around ${inspection.x}, ${inspection.y}`} />
         <div className="inspector-metrics">
@@ -1258,9 +1283,8 @@ export default function Home() {
           shortcuts: [{ keys: ["Esc"], description: "Close the active panel or inspector" }],
         }}
       />}
-      navigation={<ScientificToolRail className="workflow-navigation" label="Configuration tools" activeId={activePanel ?? "input"} expandedId={activePanel} onChange={(id) => {
+      navigation={<ScientificToolRail className="workflow-navigation" label="Configuration tools" activeId={activePanel} expandedId={activePanel} registerItemRef={registerWorkflowItemRef} onChange={(id) => {
           setActivePanel(id as "input" | "mask" | "process" | "export" | null);
-          window.requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
         }} items={[
           { id: "input", label: "Input", icon: <Document size={20} />, controlsId: "configuration-panel" },
           { id: "mask", label: "Layout", icon: <GridIcon size={20} />, controlsId: "configuration-panel" },
@@ -1269,12 +1293,12 @@ export default function Home() {
         ]} />}
       inspector={inspectorPanel}
       statusBar={statusBar}
-      panel={activePanel ? (
+      panel={(
         <ScientificTaskPanel
           id="configuration-panel"
           className="app-panel"
           titleId="configuration-panel-title"
-          title={activePanel === "input" ? "Input & layers" : activePanel === "mask" ? "Layout & placement" : activePanel === "process" ? "Process & resist" : "Review & export"}
+          title={activePanel === "input" ? "Input & layers" : activePanel === "mask" ? "Layout & placement" : activePanel === "process" ? "Process & resist" : activePanel === "export" ? "Review & export" : "Configuration"}
           eyebrow="Configuration"
           closeLabel="Close"
           onClose={closePanel}
@@ -1523,22 +1547,22 @@ export default function Home() {
                   className="export-outcome"
                   headingLevel={3}
                   headingRef={exportOutcomeHeading}
-                  title={exportReceipt?.kind === "success" ? "Machine file generated" : exportReceipt?.kind === "error" ? "Generation failed" : "Generation outcome"}
+                  title={currentExportReceipt?.kind === "success" ? "Machine file generated" : currentExportReceipt?.kind === "error" ? "Generation failed" : "Generation outcome"}
                   status={busy
                     ? { state: "running", label: "Generating files", detail: message }
-                    : exportReceipt?.kind === "success"
-                      ? { state: "up-to-date", label: "Export current", detail: exportReceipt.timestamp }
-                      : exportReceipt?.kind === "error"
-                        ? { state: "failed", label: "No file generated", detail: exportReceipt.validation }
+                    : currentExportReceipt?.kind === "success"
+                      ? { state: "up-to-date", label: "Export current", detail: currentExportReceipt.timestamp }
+                      : currentExportReceipt?.kind === "error"
+                        ? { state: "failed", label: "No file generated", detail: currentExportReceipt.validation }
                         : outsideScreen
                           ? { state: "failed", label: "Export blocked" }
                           : outsideSubstrate || minimumFeature === null || minimumFeature < 36
                             ? { state: "warning", label: "Review before generation" }
                             : { state: "ready", label: "Ready to generate", detail: message }}
-                  summary={exportReceipt?.kind === "success"
-                    ? `${exportReceipt.filename} was generated from the current transform and geometry. Keep the run manifest with the machine file.`
-                    : exportReceipt?.kind === "error"
-                      ? exportReceipt.validation
+                  summary={currentExportReceipt?.kind === "success"
+                    ? `${currentExportReceipt.filename} was generated from the current transform and geometry. Keep the run manifest with the machine file.`
+                    : currentExportReceipt?.kind === "error"
+                      ? currentExportReceipt.validation
                       : message.startsWith("Mask generation cancelled")
                         ? message
                         : "Generate the printer file only after reviewing geometry, polarity, orientation and minimum feature size."}
@@ -1556,8 +1580,13 @@ export default function Home() {
                 />
                 {busy && exportProgress && (
                   <div className="export-progress" role="status" aria-live="polite">
-                    <p>{exportProgress.stage} · {Math.round(exportProgress.completed * 100)}%</p>
-                    <progress max={1} value={exportProgress.completed}>{Math.round(exportProgress.completed * 100)}%</progress>
+                    <ProgressBar
+                      label={exportProgress.stage}
+                      helperText={`${Math.round(exportProgress.completed * 100)}% complete`}
+                      max={100}
+                      size="small"
+                      value={exportProgress.completed * 100}
+                    />
                     <Button kind="danger--tertiary" size="sm" onClick={cancelActiveExport}>Cancel generation</Button>
                   </div>
                 )}
@@ -1576,21 +1605,21 @@ export default function Home() {
                     { id: "feature", label: "Minimum feature", state: minimumFeature === null ? "not-run" : minimumFeature < 36 ? "warning" : "passed", value: minimumFeature === null ? "Not estimated" : `${minimumFeature.toFixed(1)} µm`, detail: minimumFeature !== null && minimumFeature < 36 ? "Below two native LCD pixels; inspect rasterization carefully." : undefined },
                   ]}
                 />
-                {exportReceipt && (
+                {currentExportReceipt && (
                   <SharedExportReceipt
                     className="export-receipt"
-                    kind={exportReceipt.kind}
-                    title={exportReceipt.title}
-                    fileName={exportReceipt.filename}
-                    format={exportReceipt.format}
-                    destination={exportReceipt.timestamp}
+                    kind={currentExportReceipt.kind}
+                    title={currentExportReceipt.title}
+                    fileName={currentExportReceipt.filename}
+                    format={currentExportReceipt.format}
+                    destination={currentExportReceipt.timestamp}
                   >
                     <dl>
-                      <div><dt>Time</dt><dd>{exportReceipt.timestamp}</dd></div>
-                      <div><dt>Format</dt><dd>{exportReceipt.format}</dd></div>
-                      <div><dt>Geometry</dt><dd>{exportReceipt.geometryCount.toLocaleString("en-US")} objects</dd></div>
-                      <div><dt>Transform</dt><dd>{exportReceipt.transform}</dd></div>
-                      <div><dt>Validation</dt><dd>{exportReceipt.validation}</dd></div>
+                      <div><dt>Time</dt><dd>{currentExportReceipt.timestamp}</dd></div>
+                      <div><dt>Format</dt><dd>{currentExportReceipt.format}</dd></div>
+                      <div><dt>Geometry</dt><dd>{currentExportReceipt.geometryCount.toLocaleString("en-US")} objects</dd></div>
+                      <div><dt>Transform</dt><dd>{currentExportReceipt.transform}</dd></div>
+                      <div><dt>Validation</dt><dd>{currentExportReceipt.validation}</dd></div>
                     </dl>
                   </SharedExportReceipt>
                 )}
@@ -1603,7 +1632,7 @@ export default function Home() {
                </div>
             )}
         </ScientificTaskPanel>
-      ) : undefined}
+      )}
     >
       <div id="workspace" className="gds2goo-workspace">
       <h1 className="visually-hidden">GDS2GOO scientific mask conversion workspace</h1>
@@ -1613,7 +1642,7 @@ export default function Home() {
           {sourceInfo && <>
           <div className="preview-toolbar">
             <div className="preview-heading">
-              <div><span className="live-dot" /> LCD PREVIEW</div>
+              <div>LCD PREVIEW</div>
               <p>153.36 × 77.76 mm <b>·</b> 8520 × 4320 px</p>
               <Tag className="transform-summary" size="sm" type="gray">{transformSummary}</Tag>
             </div>
@@ -1657,16 +1686,6 @@ export default function Home() {
           </div>
           {showResistResponse && visibleShapes.length > 0 && (
             <Layer className="exposure-controls" withBackground aria-label="Resist exposure model">
-              <Select id="viewer-photoresist" labelText="Photoresist" helperText="405 nm" size="sm" value={photoresistPresetId} onChange={(event) => selectPhotoresistPreset(event.target.value)}>
-                  <SelectItem value="" text="Generic / unassigned" />
-                  {PHOTORESIST_MANUFACTURERS_405_NM.map((manufacturer) => (
-                    <SelectItemGroup key={manufacturer} label={manufacturer}>
-                      {PHOTORESISTS_405_NM.filter((preset) => preset.manufacturer === manufacturer).map((preset) => (
-                        <SelectItem key={preset.id} value={preset.id} text={preset.name} />
-                      ))}
-                    </SelectItemGroup>
-                  ))}
-              </Select>
               <NumberInput id="viewer-irradiance" label={`Irradiance · mW/cm² · ${responseIrradianceIsEstimated ? "estimated" : "entered"}`} size="sm" min={0} step={0.1} value={responseIrradianceMwCm2} allowEmpty placeholder="Enter a measured value"
                 onChange={(_event, { value }) => { setResponseIrradianceMwCm2(String(value)); setResponseIrradianceIsEstimated(false); }} />
               <NumberInput id="viewer-threshold" label="Threshold time t₅₀ · s" size="sm" min={0.1} max={600} step={0.1} value={responseThresholdSeconds}
@@ -1677,7 +1696,7 @@ export default function Home() {
                 onChange={(_event, { value }) => setResponseContrast(boundedNumber(String(value), responseContrast, 0.2, 20))} />
               <div className="response-profile-note">
                 <p><strong>{(calculateResistResponse(1, settings.exposure, responseThresholdSeconds, responseContrast) * 100).toFixed(0)}%</strong> latent response for {photoresistPreset?.name ?? "the generic model"}. {photoresistPreset
-                  ? <>{photoresistPreset.documentedContrast ? `Documented γ ${photoresistPreset.documentedContrast}. ` : ""}{referenceDose ? <>Reference dose {referenceDoseText} mJ/cm² ({photoresistPreset.referenceDoseBasis}){referenceTimeText ? ` = ${referenceTimeText} at the entered irradiance` : ""}. </> : "The data sheet provides no transferable 405 nm dose. "}<a href={photoresistPreset.sourceUrl} target="_blank" rel="noreferrer">Manufacturer source</a>. E₀ is not assumed to equal t₅₀.</>
+                  ? <>{photoresistPreset.documentedContrast ? `Documented γ ${photoresistPreset.documentedContrast}. ` : ""}{referenceDose ? <>Reference dose {referenceDoseText} mJ/cm² ({photoresistPreset.referenceDoseBasis}){referenceTimeText ? ` = ${referenceTimeText} at the entered irradiance` : ""}. </> : "The data sheet provides no transferable 405 nm dose. "}<Link href={photoresistPreset.sourceUrl} target="_blank" rel="noreferrer">Manufacturer source</Link>. E₀ is not assumed to equal t₅₀.</>
                   : <>Assign a resist, then calibrate t₅₀ and σ from an exposure matrix.</>}</p>
                 <span>{responseIrradianceIsEstimated ? "10 mW/cm² · ESTIMATED FROM PAPER" : photoresistPreset ? responseProfileIsSaved ? "CALIBRATION SAVED" : savedResponseProfile ? "UNSAVED CHANGES" : photoresistPreset.documentedContrast ? "DOCUMENTED γ · CALIBRATION NEEDED" : "CALIBRATION NEEDED" : "NO RESIST ASSIGNED"}</span>
                 <Button kind="tertiary" size="sm" disabled={!photoresistPreset || responseProfileIsSaved} onClick={saveResponseProfile}>Save calibration</Button>
@@ -1734,14 +1753,19 @@ export default function Home() {
           )}
           </>}
           <div className="lcd-shell">
-            <div ref={lcdGrid} className={`lcd-grid ${visibleShapes.length ? previewZoom <= 1 ? "is-fit" : "" : "is-empty"}`} title="Use the mouse wheel or a trackpad pinch gesture to zoom">
+            <div className={`lcd-grid ${visibleShapes.length ? previewZoom <= 1 ? "is-fit" : "" : "is-empty"}`} title="Use the mouse wheel or a trackpad pinch gesture to zoom" onWheel={zoomPreview}>
               {visibleShapes.length ? (
                 <div
+                  ref={previewSurface}
                   className="preview-surface"
                   style={{ width: `${previewZoom * 100}%`, height: `${previewZoom * 100}%` }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={measureMode ? "Select the current inspection point for measurement" : "Inspect the current point at native pixel scale"}
                   onClick={inspectPreview}
+                  onKeyDown={inspectPreviewWithKeyboard}
                 >
-                  <canvas ref={preview} aria-label={showResistResponse ? "Relative photoresist response preview" : "LCD mask preview"} />
+                  <canvas ref={preview} aria-hidden="true" />
                   {substrateTemplate && (
                     <div className="substrate-template" aria-hidden="true">
                       <svg viewBox={`0 0 ${MARS_4_9K.sizeX} ${MARS_4_9K.sizeY}`} preserveAspectRatio="none">

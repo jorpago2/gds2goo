@@ -9,6 +9,11 @@ export type MaskExportResult = {
   png: Uint8Array | null
 }
 
+type WorkerMessage =
+  | { type: 'progress'; requestId: string; stage: string; completed: number }
+  | ({ type: 'complete'; requestId: string } & MaskExportResult)
+  | { type: 'error'; requestId: string; message: string }
+
 type Request = {
   resolve: (result: MaskExportResult) => void
   reject: (reason: unknown) => void
@@ -19,44 +24,66 @@ let worker: Worker | null = null
 let generation = 0
 const pending = new Map<string, Request>()
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function isWorkerMessage(value: unknown): value is WorkerMessage {
+  if (!isRecord(value) || typeof value.type !== 'string' || typeof value.requestId !== 'string') return false
+  if (value.type === 'progress') return typeof value.stage === 'string' && typeof value.completed === 'number'
+  if (value.type === 'error') return typeof value.message === 'string'
+  if (value.type !== 'complete' || !isRecord(value.encoded)) return false
+  return value.encoded.data instanceof Uint8Array
+    && typeof value.encoded.checksum === 'number'
+    && typeof value.encoded.whitePixels === 'number'
+    && value.smallPreview instanceof Uint16Array
+    && value.bigPreview instanceof Uint16Array
+    && (value.png === null || value.png instanceof Uint8Array)
+}
+
+function failPending(error: Error) {
+  for (const request of pending.values()) request.reject(error)
+  pending.clear()
+  worker?.terminate()
+  worker = null
+}
+
 function activeWorker() {
   if (worker) return worker
   const currentGeneration = generation
   worker = new Worker(new URL('./mask-export.worker.ts', import.meta.url), {
     type: 'module',
   })
-  worker.addEventListener('message', (event) => {
+  worker.addEventListener('message', (event: MessageEvent<unknown>) => {
     if (currentGeneration !== generation) return
-    const message = event.data as {
-      type: 'progress' | 'complete' | 'error'
-      requestId: string
-      stage?: string
-      completed?: number
-      message?: string
-    } & Partial<MaskExportResult>
+    if (!isWorkerMessage(event.data)) {
+      failPending(new Error('The mask worker returned an invalid response.'))
+      return
+    }
+    const message = event.data
     const request = pending.get(message.requestId)
     if (!request) return
     if (message.type === 'progress') {
       request.onProgress?.({
-        stage: message.stage ?? 'Generating mask',
-        completed: message.completed ?? 0,
+        stage: message.stage,
+        completed: message.completed,
       })
       return
     }
     pending.delete(message.requestId)
     if (message.type === 'error') {
-      request.reject(new Error(message.message ?? 'Mask generation failed.'))
+      request.reject(new Error(message.message))
       return
     }
-    request.resolve(message as MaskExportResult)
+    request.resolve(message)
   })
   worker.addEventListener('error', (event) => {
     if (currentGeneration !== generation) return
-    const error = new Error(event.message || 'The mask worker stopped unexpectedly.')
-    for (const request of pending.values()) request.reject(error)
-    pending.clear()
-    worker?.terminate()
-    worker = null
+    failPending(new Error(event.message || 'The mask worker stopped unexpectedly.'))
+  })
+  worker.addEventListener('messageerror', () => {
+    if (currentGeneration !== generation) return
+    failPending(new Error('The mask worker returned an unreadable response.'))
   })
   return worker
 }
