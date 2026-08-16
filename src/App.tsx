@@ -182,6 +182,67 @@ type GdsSession = {
   response: { thresholdSeconds: number; contrast: number; opticalBlurMicrometers: number; irradianceMwCm2: string; irradianceIsEstimated: boolean };
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isGdsSession(value: unknown): value is GdsSession {
+  if (!isRecord(value) || !isRecord(value.sourceInfo) || !isRecord(value.settings)
+    || !isRecord(value.substrate) || !isRecord(value.repeat) || !isRecord(value.layerExposures)
+    || !isRecord(value.process) || !isRecord(value.response)) return false;
+  const { sourceInfo, settings, substrate, repeat, process, response } = value;
+  const validShape = (shape: unknown) => isRecord(shape)
+    && (shape.kind === "polygon" || shape.kind === "path")
+    && Number.isInteger(shape.layer) && Number.isInteger(shape.datatype)
+    && isFiniteNumber(shape.width) && Number.isInteger(shape.pathType)
+    && Array.isArray(shape.points) && shape.points.every((point) => isRecord(point) && isFiniteNumber(point.x) && isFiniteNumber(point.y));
+  return ["gds", "generated-calibration", "generated-diagnostic"].includes(String(sourceInfo.kind))
+    && typeof sourceInfo.name === "string"
+    && (sourceInfo.sizeBytes === null || isFiniteNumber(sourceInfo.sizeBytes))
+    && (sourceInfo.sha256 === null || typeof sourceInfo.sha256 === "string")
+    && typeof value.fileName === "string" && typeof value.topCell === "string"
+    && Array.isArray(value.shapes) && value.shapes.every(validShape)
+    && Array.isArray(value.selectedLayers) && value.selectedLayers.every(Number.isInteger)
+    && isFiniteNumber(settings.exposure) && ["center", "gds-origin", "lower-left"].includes(String(settings.anchor))
+    && [settings.offsetX, settings.offsetY, settings.rotation].every(isFiniteNumber)
+    && [settings.mirrorX, settings.mirrorY, settings.inverted].every((item) => typeof item === "boolean")
+    && typeof substrate.templateId === "string" && ["round", "flat", "notch"].includes(String(substrate.marker))
+    && typeof substrate.included === "boolean"
+    && [substrate.lineWidth, substrate.offsetX, substrate.offsetY, substrate.rotation, substrate.edgeExclusion, substrate.width, substrate.height, substrate.flatLength, substrate.alignmentSize].every(isFiniteNumber)
+    && ["none", "crosses", "corners", "targets", "ruler", "full"].includes(String(substrate.alignmentStyle))
+    && [repeat.rows, repeat.columns, repeat.pitchX, repeat.pitchY].every(isFiniteNumber)
+    && Object.entries(value.layerExposures).every(([layer, exposure]) => Number.isInteger(Number(layer)) && isFiniteNumber(exposure))
+    && typeof value.calibrationSeries === "string"
+    && [process.photoresist, process.thicknessNm, process.softBake, process.development, process.notes].every((item) => typeof item === "string")
+    && typeof value.photoresistPresetId === "string"
+    && [response.thresholdSeconds, response.contrast, response.opticalBlurMicrometers].every(isFiniteNumber)
+    && typeof response.irradianceMwCm2 === "string" && typeof response.irradianceIsEstimated === "boolean";
+}
+
+function isGdsSessionOrNull(value: unknown): value is GdsSession | null {
+  return value === null || isGdsSession(value);
+}
+
+function readBrowserStorage(key: string) {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeBrowserStorage(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    throw new Error("Browser storage is unavailable. The local data was not saved.");
+  }
+}
+
 const DEFAULT_PROCESS: ProcessMetadata = {
   photoresist: "",
   thicknessNm: "",
@@ -399,8 +460,8 @@ export default function Home() {
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      setRecipes(parseRecipeLibrary(localStorage.getItem("gds2goo-recipes")) as SavedRecipe[]);
-      setResponseProfiles(parsePhotoresistResponseProfiles(localStorage.getItem("gds2goo-resist-response-profiles")) as Record<string, ResistResponseProfile>);
+      setRecipes(parseRecipeLibrary(readBrowserStorage("gds2goo-recipes")) as SavedRecipe[]);
+      setResponseProfiles(parsePhotoresistResponseProfiles(readBrowserStorage("gds2goo-resist-response-profiles")) as Record<string, ResistResponseProfile>);
     });
     return () => cancelAnimationFrame(frame);
   }, []);
@@ -638,7 +699,11 @@ export default function Home() {
       updateShapes(parsed, cell);
     } catch (error) {
       setModel(null);
+      setFileName("");
+      setTopCell("");
       setShapes([]);
+      setSelectedLayers([]);
+      setLayerExposures({});
       setSourceInfo(null);
       setMessage(error instanceof Error ? error.message : "The GDS could not be read.");
     } finally {
@@ -686,6 +751,10 @@ export default function Home() {
     try {
       const restored = parseRunManifest(await file.text());
       let restoredShapes: ReturnType<typeof flattenGds>;
+      let restoredModel = model;
+      let restoredSource = sourceInfo;
+      let restoredFileName = fileName;
+      let restoredTopCell = topCell;
       if (restored.source.kind === "gds") {
         if (!model || sourceInfo?.kind !== "gds") throw new Error("Load the source GDS before restoring this run manifest.");
         if (restored.source.sha256 && sourceInfo.sha256 && restored.source.sha256 !== sourceInfo.sha256) {
@@ -694,18 +763,28 @@ export default function Home() {
         const cell = restored.topCell ?? topCell;
         if (!model.structures.has(cell)) throw new Error(`Top cell “${cell}” is not present in the loaded GDS.`);
         restoredShapes = flattenGds(model, cell);
-        setTopCell(cell);
-        setShapes(restoredShapes);
+        restoredTopCell = cell;
       } else if (restored.source.kind === "generated-calibration") {
         restoredShapes = createCalibrationShapes();
-        loadGeneratedPattern("generated-calibration", restored.source.name, restoredShapes, "Calibration run restored.");
+        restoredModel = null;
+        restoredSource = { kind: "generated-calibration", name: restored.source.name, sizeBytes: null, sha256: null };
+        restoredFileName = restored.source.name;
+        restoredTopCell = "";
       } else {
         restoredShapes = createOrientationCheckShapes();
-        loadGeneratedPattern("generated-diagnostic", restored.source.name, restoredShapes, "Diagnostic run restored.");
+        restoredModel = null;
+        restoredSource = { kind: "generated-diagnostic", name: restored.source.name, sizeBytes: null, sha256: null };
+        restoredFileName = restored.source.name;
+        restoredTopCell = "";
       }
       const availableLayers = new Set(restoredShapes.map((shape) => shape.layer));
       const restoredLayers = restored.selectedLayers.filter((layer) => availableLayers.has(layer));
       if (!restoredLayers.length) throw new Error("None of the manifest layers exist in the selected source.");
+      setModel(restoredModel);
+      setSourceInfo(restoredSource);
+      setFileName(restoredFileName);
+      setTopCell(restoredTopCell);
+      setShapes(restoredShapes);
       setSelectedLayers(restoredLayers);
       setSettings(restored.settings as MaskSettings);
       setProcessMetadata(restored.process);
@@ -744,8 +823,8 @@ export default function Home() {
   function changeTopCell(cell: string) {
     if (!model) return;
     try {
-      setTopCell(cell);
       updateShapes(model, cell);
+      setTopCell(cell);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The cell hierarchy could not be flattened.");
     }
@@ -758,7 +837,7 @@ export default function Home() {
   }
 
   function persistRecipes(nextRecipes: SavedRecipe[]) {
-    localStorage.setItem("gds2goo-recipes", JSON.stringify(nextRecipes));
+    writeBrowserStorage("gds2goo-recipes", JSON.stringify(nextRecipes));
     setRecipes(nextRecipes);
   }
 
@@ -810,14 +889,18 @@ export default function Home() {
 
   function saveResponseProfile() {
     if (!photoresistPreset) return;
-    const nextProfiles = savePhotoresistResponseProfile(responseProfiles, photoresistPreset.id, {
-      thresholdSeconds: responseThresholdSeconds,
-      contrast: responseContrast,
-      opticalBlurMicrometers,
-    }) as Record<string, ResistResponseProfile>;
-    localStorage.setItem("gds2goo-resist-response-profiles", JSON.stringify(nextProfiles));
-    setResponseProfiles(nextProfiles);
-    setMessage(`Response calibration for ${photoresistPreset.name} saved in this browser.`);
+    try {
+      const nextProfiles = savePhotoresistResponseProfile(responseProfiles, photoresistPreset.id, {
+        thresholdSeconds: responseThresholdSeconds,
+        contrast: responseContrast,
+        opticalBlurMicrometers,
+      }) as Record<string, ResistResponseProfile>;
+      writeBrowserStorage("gds2goo-resist-response-profiles", JSON.stringify(nextProfiles));
+      setResponseProfiles(nextProfiles);
+      setMessage(`Response calibration for ${photoresistPreset.name} saved in this browser.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The response calibration could not be saved.");
+    }
   }
 
   function deleteRecipe() {
@@ -1225,6 +1308,7 @@ export default function Home() {
     onRestore: restoreSession,
     schemaVersion: 1,
     maxBytes: 3_000_000,
+    validate: isGdsSessionOrNull,
     shouldSave: (value) => value !== null,
   });
 
@@ -1293,12 +1377,13 @@ export default function Home() {
         ]} />}
       inspector={inspectorPanel}
       statusBar={statusBar}
-      panel={(
+      panel={activePanel ? (
         <ScientificTaskPanel
+          key={activePanel}
           id="configuration-panel"
           className="app-panel"
           titleId="configuration-panel-title"
-          title={activePanel === "input" ? "Input & layers" : activePanel === "mask" ? "Layout & placement" : activePanel === "process" ? "Process & resist" : activePanel === "export" ? "Review & export" : "Configuration"}
+          title={activePanel === "input" ? "Input & layers" : activePanel === "mask" ? "Layout & placement" : activePanel === "process" ? "Process & resist" : "Review & export"}
           eyebrow="Configuration"
           closeLabel="Close"
           onClose={closePanel}
@@ -1632,7 +1717,7 @@ export default function Home() {
                </div>
             )}
         </ScientificTaskPanel>
-      )}
+      ) : null}
     >
       <div id="workspace" className="gds2goo-workspace">
       <h1 className="visually-hidden">GDS2GOO scientific mask conversion workspace</h1>

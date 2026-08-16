@@ -78,6 +78,16 @@ test("parses and flattens a minimal GDSII boundary", () => {
   assert.deepEqual(shapes[0].points[2], { x: 1, y: 2 });
 });
 
+test("rejects truncated and unbalanced GDSII streams", () => {
+  const header = new Uint8Array([
+    ...record(0x05, 0x02, Array(24).fill(0)),
+    ...record(0x06, 0x06, text("TOP")),
+    ...record(0x07, 0x00),
+  ]);
+  assert.throws(() => parseGds(new Uint8Array([...header, 0]).buffer), /Invalid GDS record|GDS stream ended/);
+  assert.throws(() => parseGds(new Uint8Array([...record(0x11, 0x00)]).buffer), /ENDEL/);
+});
+
 test("parses a hierarchical GDSII stream with physical units, references, PATH and BOX", () => {
   const boundary = [[0, 0], [1000, 0], [1000, 1000], [0, 1000], [0, 0]].flatMap(([x, y]) => [...int32(x), ...int32(y)]);
   const box = [[2000, 0], [3000, 0], [3000, 1000], [2000, 1000], [2000, 0]].flatMap(([x, y]) => [...int32(x), ...int32(y)]);
@@ -125,6 +135,24 @@ test("reports exposure-relevant GDSII compatibility warnings", () => {
   assert.deepEqual(compatibility.elementCounts, { boundaries: 0, boxes: 0, paths: 1, references: 0, texts: 1, nodes: 1 });
   assert.equal(compatibility.warnings.length, 4);
   assert.match(compatibility.warnings.join(" "), /TEXT.*NODE.*custom extensions.*absolute WIDTH/);
+});
+
+test("keeps absolute PATH width unchanged through a magnified reference", () => {
+  const path = [[0, 0], [1000, 0]].flatMap(([x, y]) => [...int32(x), ...int32(y)]);
+  const bytes = new Uint8Array([
+    ...record(0x05, 0x02, Array(24).fill(0)), ...record(0x06, 0x06, text("CHILD")),
+    ...record(0x09, 0x00), ...record(0x0d, 0x02, int16(1)), ...record(0x0f, 0x03, int32(-2000)),
+    ...record(0x10, 0x03, path), ...record(0x11, 0x00),
+    ...record(0x09, 0x00), ...record(0x0d, 0x02, int16(2)), ...record(0x0f, 0x03, int32(2000)),
+    ...record(0x10, 0x03, path), ...record(0x11, 0x00),
+    ...record(0x07, 0x00),
+    ...record(0x05, 0x02, Array(24).fill(0)), ...record(0x06, 0x06, text("TOP")),
+    ...record(0x0a, 0x00), ...record(0x12, 0x06, text("CHILD")),
+    ...record(0x1b, 0x05, real8(2)), ...record(0x10, 0x03, [...int32(0), ...int32(0)]), ...record(0x11, 0x00),
+    ...record(0x07, 0x00),
+  ]);
+  const shapes = flattenGds(parseGds(bytes.buffer), "TOP");
+  assert.deepEqual(shapes.map(({ width }) => width), [2, 4]);
 });
 
 test("encodes a binary layer and validates the resulting GOO container", () => {
@@ -273,6 +301,7 @@ test("builds repeat arrays, substrate guides, usable-area checks and local recip
 
   const recipe = { name: "AZ1505", exposure: 9, calibrationSeries: "7, 9, 11", process: { photoresist: "AZ1505", thicknessNm: "600", softBake: "100 C", development: "45 s", notes: "" } };
   assert.deepEqual(parseRecipeLibrary(JSON.stringify(saveRecipeToLibrary([], recipe))), [recipe]);
+  assert.equal(saveRecipeToLibrary([recipe], { ...recipe, name: " AZ1505 " }).length, 1);
   assert.deepEqual(parseRecipeLibrary("not JSON"), []);
 });
 
@@ -355,6 +384,8 @@ test("creates a reproducible run manifest", () => {
   assert.equal(manifest.process.thicknessNanometers, 600);
   assert.deepEqual(manifest.exposuresSeconds, [7, 9, 11]);
   assert.equal(manifest.source.sha256, "abc");
+  assert.throws(() => createRunManifest({ source: manifest.source, mask: manifest.mask, exposures: [0], process: {}, outputs: ["run.json"] }), /between 0.1 and 600/);
+  assert.throws(() => createRunManifest({ source: manifest.source, mask: manifest.mask, exposures: [7], process: { thicknessNm: "not-a-number" }, outputs: ["run.json"] }), /thickness/);
   const restored = parseRunManifest(JSON.stringify(manifest));
   assert.equal(restored.settings.exposure, 7);
   assert.deepEqual(restored.selectedLayers, [1, 3]);
