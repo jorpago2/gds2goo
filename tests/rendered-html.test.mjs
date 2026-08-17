@@ -43,7 +43,7 @@ test("exports the GDS2GOO application shell", async () => {
   assert.match(source, /Microscope slide · 75 × 25 mm/);
   assert.doesNotMatch(source, /All tools|href="https:\/\/jorpago2\.github\.io\/"/);
   assert.match(source, /calibration pattern/);
-  assert.match(html, /id="workspace"/);
+  assert.match(html, /id="workspace"[^>]*tabindex="-1"/);
   assert.match(source, /Dry LCD exposure/);
   assert.match(source, /Process metadata/);
   assert.match(source, /Substrate &amp; alignment/);

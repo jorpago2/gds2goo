@@ -16,6 +16,7 @@ import {
   ProgressBar,
   Select,
   SelectItem,
+  SkipToContent,
   Slider,
   Tag,
   TextArea,
@@ -1351,6 +1352,7 @@ export default function Home() {
       panelOpen={Boolean(activePanel)}
       header={<ScientificHeader
         aria-label="GDS2GOO"
+        skipLink={<SkipToContent href="#workspace">Skip to mask workspace</SkipToContent>}
         product="GDS2GOO"
         compactProduct="GDS2GOO"
         productIcon="gds-layout"
@@ -1719,7 +1721,7 @@ export default function Home() {
         </ScientificTaskPanel>
       ) : null}
     >
-      <div id="workspace" className="gds2goo-workspace">
+      <div id="workspace" className="gds2goo-workspace" tabIndex={-1}>
       <h1 className="visually-hidden">GDS2GOO scientific mask conversion workspace</h1>
 
       <section className="app-result scientific-stage" data-empty={!sourceInfo} aria-label="Mask preview and export">
@@ -1837,7 +1839,7 @@ export default function Home() {
             </Accordion>
           )}
           </>}
-          <div className="lcd-shell">
+          <div className="lcd-shell scientific-render-surface--dark">
             <div className={`lcd-grid ${visibleShapes.length ? previewZoom <= 1 ? "is-fit" : "" : "is-empty"}`} title="Use the mouse wheel or a trackpad pinch gesture to zoom" onWheel={zoomPreview}>
               {visibleShapes.length ? (
                 <div
