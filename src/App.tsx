@@ -1347,7 +1347,6 @@ export default function Home() {
   return (
     <ScientificAppShell
       className="gds2goo-shell"
-      previewStageWhenPanelOpen
       recovery={autosave.recovery && <ScientificRecoveryNotice savedAt={autosave.recovery.savedAt} onRestore={autosave.restore} onDiscard={autosave.discard} />}
       panelOpen={Boolean(activePanel)}
       header={<ScientificHeader
