@@ -102,11 +102,11 @@ test('keeps panel and inspector interaction keyboard-owned', async ({ page }) =>
   await page.getByRole('button', { name: 'UV logo GDS example' }).click()
 
   const inputTool = page.getByRole('button', { name: 'Input', exact: true })
-  await page.keyboard.press('Escape')
-  await expect(inputTool).toBeFocused()
-  await expect(inputTool).not.toHaveAttribute('aria-current')
-  await expect(inputTool).toHaveAttribute('aria-controls', 'configuration-panel')
-
+  const compact = (page.viewportSize()?.width ?? 0) <= 1200
+  if (compact) {
+    await page.keyboard.press('Escape')
+    await expect(inputTool).toBeFocused()
+  }
   const preview = page.getByRole('button', { name: 'Inspect the current point at native pixel scale' })
   const zoom = page.getByRole('slider', { name: 'Zoom' })
   const zoomBeforeWheel = Number(await zoom.getAttribute('aria-valuenow'))
@@ -116,10 +116,30 @@ test('keeps panel and inspector interaction keyboard-owned', async ({ page }) =>
   await preview.focus()
   await page.keyboard.press('Enter')
   await expect(page.getByRole('dialog', { name: 'Native 1:1 inspector' })).toBeVisible()
-  await expect(page.locator('.scientific-inspector .cds--modal-close-button .cds--popover')).toBeHidden()
+  await expect(page.locator('.scientific-inspector .cds--modal-close-button .cds--popover')).toHaveAttribute('aria-hidden', 'true')
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog', { name: 'Native 1:1 inspector' })).toHaveCount(0)
   await expect(preview).toBeFocused()
+  if (!compact) {
+    await expect(page.getByRole('complementary', { name: 'Input & layers' })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(inputTool).toBeFocused()
+  } else {
+    await expect(preview).toBeFocused()
+  }
+  await expect(inputTool).not.toHaveAttribute('aria-current')
+  await expect(inputTool).toHaveAttribute('aria-controls', 'configuration-panel')
+})
+
+test('surfaces blocking placement feedback beside the edited controls', async ({ page }) => {
+  await page.goto('./')
+  await page.getByRole('button', { name: 'UV logo GDS example' }).click()
+  await page.getByRole('button', { name: 'Layout' }).click()
+  const anchorX = page.getByRole('spinbutton', { name: 'Anchor X · µm' })
+  await anchorX.fill('100000')
+  await anchorX.press('Tab')
+
+  await expect(page.getByText('Layout outside LCD')).toBeVisible()
 })
 
 test('closes configuration completely and resets panel scroll', async ({ page }) => {
@@ -154,9 +174,15 @@ test('keeps dynamic controls inside the fullscreen viewer', async ({ page }) => 
   const fullscreenViewer = page.locator('.preview-panel:fullscreen')
   await expect(fullscreenViewer).toBeVisible()
   expect(await fullscreenViewer.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+  const fullscreenBounds = await fullscreenViewer.boundingBox()
+  expect(fullscreenBounds?.x).toBe(0)
+  expect(fullscreenBounds?.width ?? 0).toBeGreaterThanOrEqual(1439)
   const saveCalibration = page.getByRole('button', { name: 'Save calibration' })
   const rightEdge = await saveCalibration.evaluate((element) => element.getBoundingClientRect().right)
   expect(rightEdge).toBeLessThanOrEqual(1440)
+  await page.getByRole('button', { name: 'Exit full screen' }).press('Escape')
+  await expect(page.locator('.preview-panel:fullscreen')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Full screen' })).toBeVisible()
 })
 
 test('renders the experimental run sheet in print media', async ({ page }) => {

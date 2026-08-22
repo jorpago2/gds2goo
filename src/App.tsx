@@ -1051,6 +1051,13 @@ export default function Home() {
     }
   }
 
+  function exitFullscreenWithKeyboard(event: ReactKeyboardEvent<HTMLElement>) {
+    if (event.key !== "Escape" || document.fullscreenElement !== event.currentTarget) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void document.exitFullscreen();
+  }
+
   function cancelActiveExport() {
     cancelMaskExport();
     setMessage("Cancelling mask generation…");
@@ -1219,8 +1226,8 @@ export default function Home() {
     enabled: Boolean(activePanel || inspectorOpen),
     priority: 100,
     handler: () => {
-      if (activePanel) closePanel();
-      else setInspectorOpen(false);
+      if (inspectorOpen) setInspectorOpen(false);
+      else if (activePanel) closePanel();
     },
   }), [activePanel, closePanel, inspectorOpen]);
   useScientificShortcut(closeOverlayShortcut);
@@ -1353,7 +1360,7 @@ export default function Home() {
 
   const inspectorPanel = (
     <InspectorPanel open={showInspector} title="Native 1:1 inspector" triggerRef={previewSurface} onClose={() => setInspectorOpen(false)}>
-      <div className="pixel-inspector">
+      <div className="pixel-inspector" data-modal-primary-focus tabIndex={-1}>
         <canvas ref={inspector} aria-label={`Native LCD pixels around ${inspection.x}, ${inspection.y}`} />
         <div className="inspector-metrics">
           <strong>PX {inspection.x}, {inspection.y}</strong>
@@ -1535,6 +1542,26 @@ export default function Home() {
                     onChange={(_event, { value }) => setSettings({ ...settings, offsetY: Number(value) })} />
                 </div>
                 <p className="placement-note">Anchor coordinates are measured from the LCD centre.</p>
+                {outsideScreen && (
+                  <InlineNotification
+                    className="placement-notification"
+                    hideCloseButton
+                    kind="error"
+                    lowContrast
+                    title="Layout outside LCD"
+                    subtitle="Move the layout back inside the 153.36 × 77.76 mm printable area before export."
+                  />
+                )}
+                {!outsideScreen && outsideSubstrate && (
+                  <InlineNotification
+                    className="placement-notification"
+                    hideCloseButton
+                    kind="warning"
+                    lowContrast
+                    title="Layout outside substrate"
+                    subtitle="Adjust the placement or substrate settings before generating the mask."
+                  />
+                )}
                 <Accordion className="process-metadata repeat-settings" size="sm">
                   <AccordionItem title="Step-and-repeat">
                   <div className="process-grid">
@@ -1579,13 +1606,9 @@ export default function Home() {
                       <ComboBox
                         id="saved-recipe"
                         items={recipes}
-                        itemToString={(recipe) => recipe?.name ?? ""}
-                        itemToElement={(recipe) => (
-                          <span className="recipe-option">
-                            <strong>{recipe.name}</strong>
-                            <span>{recipe.process.photoresist || "Unassigned resist"} · {recipe.process.thicknessNm ? `${recipe.process.thicknessNm} nm` : "thickness not set"} · {recipe.exposure} s</span>
-                          </span>
-                        )}
+                        itemToString={(recipe) => recipe
+                          ? `${recipe.name} · ${recipe.process.photoresist || "Unassigned resist"} · ${recipe.process.thicknessNm ? `${recipe.process.thicknessNm} nm` : "thickness not set"} · ${recipe.exposure} s`
+                          : ""}
                         selectedItem={recipes.find(({ name }) => name === selectedRecipe) ?? null}
                         titleText="Saved recipes"
                         placeholder="Search by recipe, resist or thickness"
@@ -1618,13 +1641,9 @@ export default function Home() {
                       helperText={`${PHOTORESISTS_405_NM.length} verified entries · search manufacturer, resist or tone`}
                       items={PHOTORESISTS_405_NM}
                       selectedItem={photoresistPreset ?? null}
-                      itemToString={(preset) => preset ? `${preset.manufacturer} · ${preset.name}` : ""}
-                      itemToElement={(preset) => (
-                        <span className="recipe-option">
-                          <strong>{preset.manufacturer} · {preset.name}</strong>
-                          <span>{preset.tone} · {preset.referenceThicknessNm} nm · {preset.referenceRpm} rpm</span>
-                        </span>
-                      )}
+                      itemToString={(preset) => preset
+                        ? `${preset.name} · ${preset.manufacturer} · ${preset.tone} · ${preset.referenceThicknessNm} nm · ${preset.referenceRpm} rpm`
+                        : ""}
                       placeholder="Custom / not listed"
                       size="sm"
                       shouldFilterItem={({ item, inputValue }) => !inputValue || [
@@ -1766,7 +1785,7 @@ export default function Home() {
       <h1 className="visually-hidden">GDS2GOO scientific mask conversion workspace</h1>
 
       <section className="app-result scientific-stage" data-empty={!sourceInfo} aria-label="Mask preview and export">
-        <section ref={previewPanel} className="preview-panel">
+        <section ref={previewPanel} className="preview-panel" onKeyDown={exitFullscreenWithKeyboard}>
           {sourceInfo && <>
           <div className="preview-toolbar">
             <div className="preview-heading">
