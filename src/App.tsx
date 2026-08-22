@@ -377,6 +377,7 @@ export default function Home() {
   const [selectedLayers, setSelectedLayers] = useState<number[]>([]);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [message, setMessage] = useState("Load a GDSII file to begin.");
+  const [inputError, setInputError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
   const [previewZoom, setPreviewZoom] = useState(1);
@@ -689,16 +690,19 @@ export default function Home() {
     setShapes(flattened);
     setSelectedLayers(nextLayers);
     setLayerExposures(Object.fromEntries(nextLayers.map((layer) => [layer, settings.exposure])));
+    setInputError(null);
     setMessage(`${flattened.length.toLocaleString("en-US")} geometries ready across ${nextLayers.length} layer(s).`);
   }
 
   async function loadFile(file?: File) {
     if (!file) return;
     if (!/\.gds(ii)?$/i.test(file.name)) {
+      setInputError("Select a .gds or .gdsii file.");
       setMessage("Select a .gds or .gdsii file.");
       return;
     }
     if (file.size > 25 * 1024 * 1024) {
+      setInputError("The GDS exceeds the local 25 MB browser safety limit.");
       setMessage("The GDS exceeds the local 25 MB browser safety limit.");
       return;
     }
@@ -716,9 +720,12 @@ export default function Home() {
       setFileName(file.name);
       setSourceInfo({ kind: "gds", name: file.name, sizeBytes: file.size, sha256 });
       setTopCell(cell);
+      setInputError(null);
       setExportReceipt(null);
     } catch (error) {
-      setMessage(`${error instanceof Error ? error.message : "The GDS could not be read."} The previous session was kept.`);
+      const failure = `${error instanceof Error ? error.message : "The GDS could not be read."} The previous session was kept.`;
+      setInputError(failure);
+      setMessage(failure);
     } finally {
       setBusy(false);
     }
@@ -734,6 +741,7 @@ export default function Home() {
     setSelectedLayers(generatedLayers);
     setLayerExposures(Object.fromEntries(generatedLayers.map((layer) => [layer, settings.exposure])));
     setSettings({ ...DEFAULT_SETTINGS, exposure: settings.exposure });
+    setInputError(null);
     setExportReceipt(null);
     setMessage(readyMessage);
   }
@@ -800,6 +808,7 @@ export default function Home() {
       setTopCell(restoredTopCell);
       setShapes(restoredShapes);
       setSelectedLayers(restoredLayers);
+      setInputError(null);
       setExportReceipt(null);
       setSettings(restored.settings as MaskSettings);
       setProcessMetadata(restored.process);
@@ -831,7 +840,9 @@ export default function Home() {
       if (restored.exposures.length > 1) setCalibrationSeries(restored.exposures.join(", "));
       setMessage(`Run restored from ${file.name}. Verify the preview before export.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The run manifest could not be restored.");
+      const failure = error instanceof Error ? error.message : "The run manifest could not be restored.";
+      setInputError(failure);
+      setMessage(failure);
     }
   }
 
@@ -841,7 +852,9 @@ export default function Home() {
       updateShapes(model, cell);
       setTopCell(cell);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The cell hierarchy could not be flattened.");
+      const failure = error instanceof Error ? error.message : "The cell hierarchy could not be flattened.";
+      setInputError(failure);
+      setMessage(failure);
     }
   }
 
@@ -1436,6 +1449,16 @@ export default function Home() {
         >
             {activePanel === "input" && (
               <>
+                {inputError && (
+                  <InlineNotification
+                    className="input-error-notification"
+                    kind="error"
+                    lowContrast
+                    title="Source could not be loaded"
+                    subtitle={inputError}
+                    onClose={() => setInputError(null)}
+                  />
+                )}
                 <FileUploaderDropContainer
                   id="gds-file"
                   className="gds-uploader"
@@ -1752,6 +1775,10 @@ export default function Home() {
                     { id: "feature", label: "Minimum feature", state: minimumFeature === null ? "not-run" : minimumFeature < 36 ? "warning" : "passed", value: minimumFeature === null ? "Not estimated" : `${minimumFeature.toFixed(1)} µm`, detail: minimumFeature !== null && minimumFeature < 36 ? "Below two native LCD pixels; inspect rasterization carefully." : undefined },
                   ]}
                 />
+                <div className="export-assumptions" role="note">
+                  <strong>Limits and assumptions</strong>
+                  <p>Local rasterization targets the Elegoo Mars 4 9K: 8,520 × 4,320 pixels at 18 µm. Geometry outside the LCD is blocked; sub-resolution features and substrate guides remain warnings and are recorded in the run manifest.</p>
+                </div>
                 {currentExportReceipt && (
                   <SharedExportReceipt
                     className="export-receipt"

@@ -80,7 +80,7 @@ test('does not partially apply an incompatible run manifest', async ({ page }) =
       exposuresSeconds: [9],
     })),
   })
-  await page.getByRole('button', { name: 'Close' }).click()
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
   await expect(page.getByRole('button', { name: 'None of the manifest layers exist in the selected source.', exact: true })).toBeVisible()
   await expect(page.getByRole('banner')).toContainText('mars4-9k-orientation-check')
   await expect(page.getByRole('banner')).not.toContainText('should-not-replace-current')
@@ -167,7 +167,7 @@ test('keeps dynamic controls inside the fullscreen viewer', async ({ page }) => 
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('./')
   await page.getByRole('button', { name: 'UV logo GDS example' }).click()
-  await page.getByRole('button', { name: 'Close' }).click()
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
   await page.locator('label[for="resist-response"]').click()
   await page.getByRole('button', { name: 'Full screen' }).click()
 
@@ -201,7 +201,7 @@ test('has no serious accessibility violations or horizontal overflow', async ({ 
   page.on('pageerror', (error) => pageErrors.push(error.message))
   await page.goto('./')
   await page.getByRole('button', { name: 'Printer orientation check' }).click()
-  await page.getByRole('button', { name: 'Close' }).click()
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
   const violations = await new AxeBuilder({ page }).exclude('canvas').analyze()
   expect(violations.violations.filter(({ impact }) => impact === 'serious' || impact === 'critical')).toEqual([])
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
