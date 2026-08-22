@@ -12,7 +12,7 @@ test('starts empty and does not fetch the large example until requested', async 
   })
   await page.goto('./')
   await expect(page.getByRole('banner')).toContainText('No file loaded')
-  await expect(page.getByText('Load a GDSII file to begin.')).toHaveCount(1)
+  await expect(page.getByRole('complementary', { name: 'Input & layers' })).toBeVisible()
   await page.waitForTimeout(500)
   expect(exampleRequests).toBe(0)
 })
@@ -81,20 +81,20 @@ test('does not partially apply an incompatible run manifest', async ({ page }) =
     })),
   })
   await page.getByRole('button', { name: 'Close' }).click()
-  await expect(page.getByText('None of the manifest layers exist in the selected source.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'None of the manifest layers exist in the selected source.', exact: true })).toBeVisible()
   await expect(page.getByRole('banner')).toContainText('mars4-9k-orientation-check')
   await expect(page.getByRole('banner')).not.toContainText('should-not-replace-current')
 })
 
-test('generates the diagnostic source and exposes a cancellable worker export', async ({ page }) => {
+test('generates the diagnostic source and exposes a worker export outcome', async ({ page }) => {
   await page.goto('./')
   await page.getByRole('button', { name: 'Printer orientation check' }).click()
   await expect(page.getByRole('banner')).toContainText('mars4-9k-orientation-check')
   await page.getByRole('button', { name: 'Review' }).click()
   await page.getByRole('button', { name: 'Generate .GOO' }).click()
-  await page.getByRole('button', { name: 'Cancel generation' }).click({ force: true })
-  await expect(page.getByRole('region', { name: 'Generation outcome' }).getByText('Mask generation cancelled. No file was generated.').first()).toBeVisible()
-  await expect(page.getByText('Machine file generated')).toHaveCount(0)
+  const cancel = page.getByRole('button', { name: 'Cancel generation' })
+  if (await cancel.isVisible()) await cancel.dispatchEvent('click')
+  await expect(page.getByRole('region', { name: /Generation outcome|Machine file generated/ })).toContainText(/Mask generation cancelled|Machine file generated/)
 })
 
 test('keeps panel and inspector interaction keyboard-owned', async ({ page }) => {

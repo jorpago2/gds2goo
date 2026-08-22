@@ -177,6 +177,7 @@ h1, h2, h3 { min-width: 0; overflow-wrap: anywhere; }
   body { background: var(--print-paper); color: var(--print-ink); font-family: var(--font-body); }
   .gds2goo-shell > :not(main) { display: none; }
   .gds2goo-shell .app-panel { display: none; }
+  .gds2goo-shell[data-panel-open] .scientific-workbench__stage { display: block; }
   .gds2goo-shell > main, .gds2goo-workspace { display: block; min-block-size: 0; block-size: auto; max-block-size: none; overflow: visible; }
   .gds2goo-workspace > :not(.print-sheet) { display: none; }
   .print-sheet { display: block; font-size: 10pt; }
