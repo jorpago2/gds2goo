@@ -31,7 +31,7 @@ import {
   flattenGds,
   parseGds,
 } from "@/lib/gds.js";
-import { Chemistry, Document, Download, Grid as GridIcon } from "@carbon/react/icons";
+import { ArrowsHorizontal, ArrowsVertical, Chemistry, Document, Download, Grid as GridIcon } from "@carbon/react/icons";
 import {
   ExportReceipt as SharedExportReceipt,
   InspectorPanel,
@@ -490,6 +490,22 @@ export default function Home() {
     [visibleShapes, repeatRows, repeatColumns, repeatPitchX, repeatPitchY],
   );
   const bounds = useMemo(() => repeatedShapes.length ? boundsOf(repeatedShapes) : null, [repeatedShapes]);
+  const layerSummary = useMemo(() => {
+    const byLayer = new Map<number, { count: number; polygons: number; paths: number; datatypes: Set<number> }>();
+    for (const shape of visibleShapes) {
+      const current = byLayer.get(shape.layer) ?? { count: 0, polygons: 0, paths: 0, datatypes: new Set<number>() };
+      current.count += 1;
+      if (shape.kind === "path") current.paths += 1;
+      else current.polygons += 1;
+      current.datatypes.add(shape.datatype);
+      byLayer.set(shape.layer, current);
+    }
+    return [...byLayer.entries()].sort(([left], [right]) => left - right).map(([layer, summary]) => ({
+      layer,
+      ...summary,
+      datatypes: [...summary.datatypes].sort((left, right) => left - right),
+    }));
+  }, [visibleShapes]);
   const minimumFeature = useMemo(
     () => repeatedShapes.length ? estimateMinimumFeature(repeatedShapes) : null,
     [repeatedShapes],
@@ -693,20 +709,16 @@ export default function Home() {
       const parsed = parseGds(buffer);
       const sha256 = await sha256Hex(buffer);
       const cell = parsed.topCells.at(-1) ?? "";
+      // Flatten before replacing the current session. A malformed or unsupported
+      // file must not destroy a valid layout that is already being reviewed.
+      updateShapes(parsed, cell);
       setModel(parsed);
       setFileName(file.name);
       setSourceInfo({ kind: "gds", name: file.name, sizeBytes: file.size, sha256 });
       setTopCell(cell);
-      updateShapes(parsed, cell);
+      setExportReceipt(null);
     } catch (error) {
-      setModel(null);
-      setFileName("");
-      setTopCell("");
-      setShapes([]);
-      setSelectedLayers([]);
-      setLayerExposures({});
-      setSourceInfo(null);
-      setMessage(error instanceof Error ? error.message : "The GDS could not be read.");
+      setMessage(`${error instanceof Error ? error.message : "The GDS could not be read."} The previous session was kept.`);
     } finally {
       setBusy(false);
     }
@@ -722,6 +734,7 @@ export default function Home() {
     setSelectedLayers(generatedLayers);
     setLayerExposures(Object.fromEntries(generatedLayers.map((layer) => [layer, settings.exposure])));
     setSettings({ ...DEFAULT_SETTINGS, exposure: settings.exposure });
+    setExportReceipt(null);
     setMessage(readyMessage);
   }
 
@@ -787,6 +800,7 @@ export default function Home() {
       setTopCell(restoredTopCell);
       setShapes(restoredShapes);
       setSelectedLayers(restoredLayers);
+      setExportReceipt(null);
       setSettings(restored.settings as MaskSettings);
       setProcessMetadata(restored.process);
       const restoredPhotoresistId = PHOTORESISTS_405_NM.find(({ name }) => name === restored.process.photoresist)?.id ?? "";
@@ -1021,9 +1035,20 @@ export default function Home() {
   }
 
   function inspectPreviewWithKeyboard(event: ReactKeyboardEvent<HTMLDivElement>) {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    inspectPreviewPoint(inspection);
+    const step = event.shiftKey ? 10 : 1;
+    const nextPoint = {
+      x: Math.max(0, Math.min(MARS_4_9K.width - 1, inspection.x + (event.key === "ArrowRight" ? step : event.key === "ArrowLeft" ? -step : 0))),
+      y: Math.max(0, Math.min(MARS_4_9K.height - 1, inspection.y + (event.key === "ArrowDown" ? step : event.key === "ArrowUp" ? -step : 0))),
+    };
+    if (["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"].includes(event.key)) {
+      event.preventDefault();
+      setInspection(nextPoint);
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      inspectPreviewPoint(inspection);
+    }
   }
 
   function cancelActiveExport() {
@@ -1211,15 +1236,22 @@ export default function Home() {
     return () => compactLayout.removeEventListener("change", keepOneOverlay);
   }, [activePanel, inspectorOpen]);
 
+  const exportableGeometry = Boolean(visibleShapes.length && !outsideScreen);
   const workspaceStatus = outsideScreen
     ? "Outside LCD"
     : outsideSubstrate
       ? "Check substrate"
       : busy
         ? "Processing"
-        : sourceInfo
-          ? "Ready"
-          : "Needs input";
+        : !sourceInfo
+          ? "Needs input"
+          : !visibleShapes.length
+            ? "Needs geometry"
+            : currentExportReceipt?.kind === "success"
+              ? "Export current"
+              : exportReceipt
+                ? "Modified"
+                : "Ready to export";
   const showInspector = inspectorOpen && visibleShapes.length > 0;
   const scientificState: ScientificState = outsideScreen
     ? "failed"
@@ -1227,9 +1259,15 @@ export default function Home() {
       ? "warning"
       : busy
         ? "running"
-        : sourceInfo
-          ? "ready"
-          : "needs-input";
+        : !sourceInfo
+          ? "needs-input"
+          : !visibleShapes.length
+            ? "warning"
+            : currentExportReceipt?.kind === "success"
+              ? "up-to-date"
+              : exportReceipt
+                ? "modified"
+                : "ready";
   const session = useMemo<GdsSession | null>(() => sourceInfo ? ({
     sourceInfo,
     fileName,
@@ -1522,8 +1560,8 @@ export default function Home() {
                   </Layer>
                 )}
                 <div className="toggle-row">
-                  <Button kind={settings.mirrorX ? "primary" : "tertiary"} size="sm" aria-pressed={settings.mirrorX} onClick={() => setSettings({ ...settings, mirrorX: !settings.mirrorX })}>↔ Mirror X</Button>
-                  <Button kind={settings.mirrorY ? "primary" : "tertiary"} size="sm" aria-pressed={settings.mirrorY} onClick={() => setSettings({ ...settings, mirrorY: !settings.mirrorY })}>↕ Mirror Y</Button>
+                  <Button kind={settings.mirrorX ? "primary" : "tertiary"} size="sm" renderIcon={ArrowsHorizontal} aria-pressed={settings.mirrorX} onClick={() => setSettings({ ...settings, mirrorX: !settings.mirrorX })}>Mirror X</Button>
+                  <Button kind={settings.mirrorY ? "primary" : "tertiary"} size="sm" renderIcon={ArrowsVertical} aria-pressed={settings.mirrorY} onClick={() => setSettings({ ...settings, mirrorY: !settings.mirrorY })}>Mirror Y</Button>
                 </div>
                 <Toggle id="invert-polarity" className="switch-row" size="sm" labelText="Invert polarity" labelA="Exposed geometry" labelB="Exposed background" toggled={settings.inverted} onToggle={(checked) => setSettings({ ...settings, inverted: checked })} />
               </>
@@ -1640,7 +1678,9 @@ export default function Home() {
                       ? { state: "up-to-date", label: "Export current", detail: currentExportReceipt.timestamp }
                       : currentExportReceipt?.kind === "error"
                         ? { state: "failed", label: "No file generated", detail: currentExportReceipt.validation }
-                        : outsideScreen
+                        : !visibleShapes.length
+                          ? { state: "warning", label: "Geometry required" }
+                          : outsideScreen
                           ? { state: "failed", label: "Export blocked" }
                           : outsideSubstrate || minimumFeature === null || minimumFeature < 36
                             ? { state: "warning", label: "Review before generation" }
@@ -1649,18 +1689,20 @@ export default function Home() {
                     ? `${currentExportReceipt.filename} was generated from the current transform and geometry. Keep the run manifest with the machine file.`
                     : currentExportReceipt?.kind === "error"
                       ? currentExportReceipt.validation
-                      : message.startsWith("Mask generation cancelled")
+                    : message.startsWith("Mask generation cancelled")
                         ? message
-                        : "Generate the printer file only after reviewing geometry, polarity, orientation and minimum feature size."}
+                        : !visibleShapes.length
+                          ? "Select at least one geometry layer before generating a machine file."
+                          : "Generate the printer file only after reviewing geometry, polarity, orientation and minimum feature size."}
                   metrics={[
                     { id: "geometry", label: "Exported geometry", value: repeatedShapes.length, unit: "objects", format: { notation: "standard", significantDigits: 8 } },
                     { id: "minimum-feature", label: "Minimum feature", value: minimumFeature === null ? "Not estimated" : minimumFeature, unit: minimumFeature === null ? undefined : "µm", format: { significantDigits: 4 }, status: minimumFeature !== null && minimumFeature < 36 ? "warning" : "neutral" },
                     { id: "copies", label: "Step-and-repeat", value: `${repeatRows} × ${repeatColumns}` },
                   ]}
                   actions={[
-                    { id: "generate-goo", label: busy ? "Processing…" : "Generate .GOO", emphasis: "primary", disabled: busy || !visibleShapes.length || outsideScreen, disabledReason: outsideScreen ? "Move the geometry inside the LCD area." : !visibleShapes.length ? "Select geometry before generating." : undefined, onClick: () => void exportGoo() },
-                    { id: "verification-png", label: "Verification PNG", emphasis: "secondary", collapseAt: "sm", disabled: busy || !visibleShapes.length || outsideScreen, onClick: () => void exportPng() },
-                    { id: "experiment-bundle", label: "Experiment bundle", emphasis: "secondary", collapseAt: "md", disabled: busy || !visibleShapes.length || outsideScreen, onClick: () => void exportBundle() },
+                    { id: "generate-goo", label: busy ? "Processing…" : "Generate .GOO", emphasis: "primary", disabled: busy || !exportableGeometry, disabledReason: outsideScreen ? "Move the geometry inside the LCD area." : !visibleShapes.length ? "Select geometry before generating." : undefined, onClick: () => void exportGoo() },
+                    { id: "verification-png", label: "Verification PNG", emphasis: "secondary", collapseAt: "sm", disabled: busy || !exportableGeometry, disabledReason: outsideScreen ? "Move the geometry inside the LCD area." : !visibleShapes.length ? "Select geometry before generating." : undefined, onClick: () => void exportPng() },
+                    { id: "experiment-bundle", label: "Experiment bundle", emphasis: "secondary", collapseAt: "md", disabled: busy || !exportableGeometry, disabledReason: outsideScreen ? "Move the geometry inside the LCD area." : !visibleShapes.length ? "Select geometry before generating." : undefined, onClick: () => void exportBundle() },
                     { id: "run-sheet", label: "Run sheet", emphasis: "tertiary", overflowOnly: true, disabled: busy || !visibleShapes.length, onClick: printRunSheet },
                   ]}
                 />
@@ -1682,7 +1724,7 @@ export default function Home() {
                   description="Resolve blocking geometry issues before generating machine files. Process metadata warnings remain visible in the run manifest."
                   status={{
                     state: outsideScreen ? "failed" : outsideSubstrate || minimumFeature === null || minimumFeature < 36 ? "warning" : "ready",
-                    label: outsideScreen ? "Export blocked" : outsideSubstrate || minimumFeature === null || minimumFeature < 36 ? "Review before export" : "Ready to generate",
+                    label: !visibleShapes.length ? "Geometry required" : outsideScreen ? "Export blocked" : outsideSubstrate || minimumFeature === null || minimumFeature < 36 ? "Review before export" : "Ready to generate",
                   }}
                   checks={[
                     { id: "geometry", label: "Selected geometry", state: visibleShapes.length ? "passed" : "failed", value: `${visibleShapes.length.toLocaleString("en-US")} objects` },
@@ -1847,7 +1889,8 @@ export default function Home() {
                   style={{ width: `${previewZoom * 100}%`, height: `${previewZoom * 100}%` }}
                   role="button"
                   tabIndex={0}
-                  aria-label={measureMode ? "Select the current inspection point for measurement" : "Inspect the current point at native pixel scale"}
+                  aria-describedby="mask-preview-summary mask-inspection-announcement"
+                  aria-label={`${measureMode ? "Select the current inspection point for measurement" : "Inspect the current point at native pixel scale"}; pixel ${inspection.x}, ${inspection.y}. Use arrow keys to move, Shift plus arrow for larger steps, Enter to inspect.`}
                   onClick={inspectPreview}
                   onKeyDown={inspectPreviewWithKeyboard}
                 >
@@ -1928,6 +1971,32 @@ export default function Home() {
                 : measurementStart ? "MEASURE · Select the second point." : "MEASURE · Select the first point."}</p>
             )}
           </div>
+          <section id="mask-preview-summary" className="preview-data-summary" aria-labelledby="mask-preview-summary-title">
+            <h3 id="mask-preview-summary-title">Preview data summary</h3>
+            <p>
+              {visibleShapes.length
+                ? `${visibleShapes.length.toLocaleString("en-US")} selected geometries across ${layerSummary.length} layer(s). ${bounds ? `Placed extent ${(bounds.width / 1000).toFixed(3)} × ${(bounds.height / 1000).toFixed(3)} mm; minimum feature ${minimumFeature === null ? "not estimated" : `${minimumFeature.toFixed(1)} µm`}.` : "Extent unavailable."}`
+                : "No selected geometry is available for preview or export."}
+            </p>
+            {layerSummary.length > 0 && (
+              <div className="table-scroll" tabIndex={0} aria-label="Selected geometry by layer">
+                <table className="scientific-data-table">
+                  <caption className="visually-hidden">Selected geometry by layer</caption>
+                  <thead><tr><th scope="col">Layer</th><th scope="col">Objects</th><th scope="col">Polygons</th><th scope="col">Paths</th><th scope="col">Datatypes</th></tr></thead>
+                  <tbody>{layerSummary.map((summary) => <tr key={summary.layer}>
+                    <th scope="row">{summary.layer}</th>
+                    <td>{summary.count.toLocaleString("en-US")}</td>
+                    <td>{summary.polygons.toLocaleString("en-US")}</td>
+                    <td>{summary.paths.toLocaleString("en-US")}</td>
+                    <td>{summary.datatypes.join(", ")}</td>
+                  </tr>)}</tbody>
+                </table>
+              </div>
+            )}
+            <p id="mask-inspection-announcement" className="visually-hidden" aria-live="polite">
+              Keyboard inspection point: pixel {inspection.x}, {inspection.y}.
+            </p>
+          </section>
         </section>
       </section>
 

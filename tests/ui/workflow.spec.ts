@@ -31,6 +31,36 @@ test('ignores a structurally invalid autosave draft', async ({ page }) => {
   await expect(page.getByRole('banner')).toContainText('No file loaded')
 })
 
+test('keeps the active session when an invalid GDS replaces it', async ({ page }) => {
+  await page.goto('./')
+  await page.getByRole('button', { name: 'Printer orientation check' }).click()
+  await expect(page.getByRole('banner')).toContainText('mars4-9k-orientation-check')
+
+  await page.locator('#gds-file').setInputFiles({
+    name: 'invalid.gds',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from([0, 1, 2, 3]),
+  })
+
+  await expect(page.getByText(/The previous session was kept\./).first()).toHaveCount(1)
+  await expect(page.getByRole('banner')).toContainText('mars4-9k-orientation-check')
+})
+
+test('marks the export state as modified after a current export is edited', async ({ page }) => {
+  await page.goto('./')
+  await page.getByRole('button', { name: 'Printer orientation check' }).click()
+  await page.getByRole('button', { name: 'Review' }).click()
+  const outcome = page.getByRole('region', { name: 'Generation outcome' })
+  await expect(outcome).toContainText('Ready to generate')
+  await outcome.getByRole('button', { name: 'More actions' }).click()
+  await page.getByRole('menuitem', { name: 'Verification PNG' }).click()
+  await expect(page.getByRole('banner')).toContainText('Export current')
+
+  await page.getByRole('button', { name: 'Layout' }).click()
+  await page.getByRole('button', { name: /Mirror X/ }).click()
+  await expect(page.getByRole('banner')).toContainText('Modified')
+})
+
 test('does not partially apply an incompatible run manifest', async ({ page }) => {
   await page.goto('./')
   await page.getByRole('button', { name: 'Printer orientation check' }).click()

@@ -216,6 +216,11 @@ h1, h2, h3 { min-width: 0; overflow-wrap: anywhere; }
 .status-metrics dt { color: var(--cds-text-secondary); white-space: nowrap; }
 .status-metrics dd { min-width: 0; margin: 0; overflow: hidden; color: var(--cds-text-primary); font-family: var(--font-body); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 .status-metrics .warn { color: var(--cds-support-error); }
+.preview-data-summary { margin-block-start: var(--space-md); padding: var(--space-sm); border-block-start: 1px solid var(--cds-border-subtle); background: var(--cds-layer-01); }
+.preview-data-summary h3 { margin: 0 0 var(--space-2xs); font-size: 1rem; }
+.preview-data-summary p { margin: 0 0 var(--space-xs); color: var(--cds-text-secondary); }
+.preview-data-summary .table-scroll { max-inline-size: 100%; overflow-x: auto; }
+.preview-data-summary table { min-inline-size: 32rem; }
 
 @media (max-width: 48rem) {
   .app-result { padding: var(--space-sm); }
